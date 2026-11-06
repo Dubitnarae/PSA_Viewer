@@ -1,7 +1,7 @@
 """PSA 입도 뷰어 버전 정보 - 버전은 이 파일에서만 수정한다."""
 
 APP_NAME = "PSA 입도 뷰어"
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 AUTHOR = "KIM YEONGDO"
 GITHUB_REPO = "Dubitnarae/PSA_Viewer"  # 자동 업데이트가 릴리스를 확인하는 저장소(공개여야 함)
 
