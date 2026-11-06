@@ -3,6 +3,7 @@
 저장 폴더(기본: 프로그램 폴더\\PSA_Data, 위치는 psa_viewer_settings.json에 기록)
 - originals\\<sha256>.<확장자> : 측정 원본 사본. 같은 파일은 한 번만 저장된다.
 - library.json               : 데이터 목록(결과값·누적분포·로트·메모). 덮어쓰기 전 library.json.bak 보관.
+- calib.json                 : 혼합 예측 보정 기록(묶음별 실측−예측 누적 차이). 덮어쓰기 전 calib.json.bak 보관.
 - projects\\*.psa            : 작업 저장 파일(열어 둔 파일 목록·수율 기준, JSON).
 측정 데이터이므로 이 폴더는 절대 커밋하지 않는다(.gitignore).
 """
@@ -18,6 +19,7 @@ from pathlib import Path
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 SETTINGS = APP_DIR / "psa_viewer_settings.json"
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
+DOCS = {"library": "library.json", "calib": "calib.json"}  # JS가 고를 수 있는 목록 파일 (그 밖의 이름은 KeyError)
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
@@ -81,16 +83,16 @@ class Api:
         return n
 
     # ---------- 데이터 목록 ----------
-    def lib_load(self) -> str:
-        p = self._dir() / "library.json"
+    def lib_load(self, doc: str = "library") -> str:
+        p = self._dir() / DOCS[doc]
         return p.read_text(encoding="utf-8") if p.exists() else "[]"
 
-    def lib_save(self, text: str) -> bool:
+    def lib_save(self, text: str, doc: str = "library") -> bool:
+        p = self._dir() / DOCS[doc]
         if not isinstance(json.loads(text), list):  # 깨진 데이터로 덮어쓰지 않기
             raise ValueError("데이터 목록 형식이 잘못되었습니다.")
-        p = self._dir() / "library.json"
         if p.exists():
-            shutil.copy2(p, p.with_name("library.json.bak"))
+            shutil.copy2(p, p.with_name(p.name + ".bak"))
         _atomic_write(p, text.encode("utf-8"))
         return True
 
@@ -154,5 +156,11 @@ if __name__ == "__main__":  # 자체 점검: python storage.py
         except ValueError:
             pass
         assert json.loads(api.lib_load())[0]["key"] == 2  # 깨진 저장은 기존 목록을 건드리지 않음
+        api.lib_save('[{"g": 1}]', "calib")
+        assert json.loads(api.lib_load("calib"))[0]["g"] == 1 and json.loads(api.lib_load())[0]["key"] == 2
+        try:
+            api.lib_load("../x"); raise AssertionError
+        except KeyError:
+            pass
         assert api.delete_originals([sha]) == 1 and api.read_original(sha) is None
     print("ok")

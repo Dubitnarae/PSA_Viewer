@@ -2,7 +2,7 @@
 const fs = require('fs');
 const src = fs.readFileSync(require("path").join(__dirname, "index.html"), 'utf8');
 const grab = n => { const i = src.indexOf(`function ${n}(`); let d = 0, j = src.indexOf('{', i); for (; ; j++) { if (src[j] === '{') d++; if (src[j] === '}' && !--d) break; } return src.slice(i, j + 1); };
-eval(['underAt', 'fractions', 'unionGrid', 'qOnGrid', 'mixQ', 'toDist', 'dAt', 'dRes', 'volFrac', 'optimizeMix'].map(grab).join('\n'));
+eval(['underAt', 'fractions', 'unionGrid', 'qOnGrid', 'mixQ', 'toDist', 'dAt', 'dRes', 'volFrac', 'optimizeMix', 'corrOn', 'fixQ'].map(grab).join('\n'));
 const assert = require('assert');
 // lognormal powders on a log grid
 const x = Array.from({ length: 101 }, (_, i) => 0.1 * 10 ** (i * 0.04));
@@ -30,4 +30,11 @@ const t3 = fractions({ x: G3, Q: mixQ(Q3, [0.2, 0.3, 0.5]) }, [15, 45]);
 const t0 = performance.now();
 best = optimizeMix([1, 1, 1], w => fractions({ x: G3, Q: mixQ(Q3, w) }, [15, 45]).reduce((a, v, i) => a + (v - t3[i]) ** 2, 0));
 assert(best.v < 0.01, best);
+// 6) 보정: 실측(=예측보다 굵은 혼합분말)으로 기록 1건 저장하면 같은 혼합의 보정 예측이 실측과 같아짐
+const pred = { x: G, Q: mixQ(Qs, [0.35, 0.65]) }, meas = ln(14, 0.45), Gm = unionGrid([pred, meas]);
+const rec = { x: Gm, dQ: Gm.map(d => underAt(meas, d) - underAt(pred, d)) };
+const fixed = { x: G, Q: fixQ(pred.Q, corrOn(G, [rec])) };
+assert(Math.abs(dAt(fixed, 50) / dAt(meas, 50) - 1) < 0.01, [dAt(fixed, 50), dAt(meas, 50)]);
+assert(fixed.Q.every((v, i) => v >= 0 && v <= 100 && (!i || v >= fixed.Q[i - 1])));
+assert(fixQ(pred.Q, null) === pred.Q);
 console.log('ok', best.w.map(v => v.toFixed(3)), (performance.now() - t0).toFixed(0) + 'ms');
