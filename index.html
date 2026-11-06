@@ -1,0 +1,881 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>PSA 입도 뷰어</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap">
+<style>
+/* Layout: lab-instrument workbench — file rail on top, chart + result readout side by side, raw data below */
+:root {
+  --bg: #f3f5f7; --surface: #ffffff; --ink: #14181d; --ink-2: #505862; --ink-3: #7b838d;
+  --line: #dde1e6; --grid: #e9ecef; --accent: #2a78d6; --accent-soft: #e5effb; --warn: #9a5b00; --warn-bg: #fff4dc;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --sans: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111417; --surface: #191d21; --ink: #eceef1; --ink-2: #a8afb8; --ink-3: #7f8790;
+  --line: #2c3238; --grid: #23282d; --accent: #3987e5; --accent-soft: #1b2c42; --warn: #f0b44c; --warn-bg: #2e2513;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #111417; --surface: #191d21; --ink: #eceef1; --ink-2: #a8afb8; --ink-3: #7f8790;
+  --line: #2c3238; --grid: #23282d; --accent: #3987e5; --accent-soft: #1b2c42; --warn: #f0b44c; --warn-bg: #2e2513;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  color-scheme: dark; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 48px; }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+h1 { font-size: 22px; font-weight: 600; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 15px; font-weight: 600; margin: 0; }
+.sub { color: var(--ink-2); margin: 2px 0 0; font-size: 13px; }
+.mono, .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+
+.btn { font: inherit; font-size: 13px; font-weight: 500; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  border-radius: 6px; padding: 6px 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn:focus-visible, .chip:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.rail { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rail .hint { color: var(--ink-3); font-size: 12.5px; margin-left: auto; }
+.chip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 6px 3px 10px;
+  background: transparent; color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; max-width: 100%; }
+.chip[aria-pressed="true"] { border-color: var(--ink-2); background: var(--accent-soft); }
+.chip .sw { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.chip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.chip .tag { font-size: 11px; color: var(--ink-3); }
+.chip .x { border: 0; background: none; color: var(--ink-3); font-size: 15px; line-height: 1; padding: 2px 4px; cursor: pointer; border-radius: 4px; }
+.chip .x:hover { color: var(--ink); background: var(--grid); }
+
+.drop { position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 14%, transparent); border: 3px dashed var(--accent);
+  display: grid; place-items: center; font-size: 18px; font-weight: 600; color: var(--ink); z-index: 10; pointer-events: none; }
+
+.warn { background: var(--warn-bg); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+@media (max-width: 880px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.panel-head .meta { color: var(--ink-3); font-size: 12px; }
+
+#chart { position: relative; }
+#chart svg { width: 100%; height: auto; display: block; touch-action: pan-y; }
+.tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  padding: 6px 8px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); min-width: 150px; }
+.tip .hd { font-family: var(--mono); font-weight: 500; margin-bottom: 3px; }
+.tip .row { display: grid; grid-template-columns: 10px 1fr auto auto; gap: 6px; align-items: center; font-family: var(--mono); font-size: 11.5px; }
+.tip .row .sw { width: 8px; height: 8px; border-radius: 2px; }
+.tip .row .l { font-family: var(--sans); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.readout .sample { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 8px; margin-bottom: 2px; overflow-wrap: anywhere; }
+.readout .sample .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.readout .when { color: var(--ink-2); font-size: 12.5px; margin-bottom: 12px; }
+.dvals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+.dv { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.dv .k { font-size: 11px; letter-spacing: .04em; color: var(--ink-3); }
+.dv .v { font-family: var(--mono); font-size: 17px; font-weight: 500; }
+.dv .u { font-size: 11px; color: var(--ink-3); }
+dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
+dl.kv dt { color: var(--ink-2); }
+dl.kv dd { margin: 0; text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.check { margin-top: 12px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 8px; }
+
+.tbl-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { font-weight: 500; color: var(--ink-2); font-size: 12px; background: var(--surface); position: sticky; top: 0; }
+th:first-child, td:first-child, th.l { text-align: left; }
+td { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+td.txt { font-family: var(--sans); }
+tr.active td { background: var(--accent-soft); }
+tfoot td { border-bottom: 0; border-top: 1px solid var(--ink-3); color: var(--ink); font-weight: 500; }
+tfoot tr + tr td { border-top: 0; }
+td.over { color: var(--warn); }
+td.fn { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: var(--ink-2); font-size: 12px; }
+.scroll { max-height: 360px; overflow: auto; }
+
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ctrl { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; margin-bottom: 12px; }
+.field { display: grid; gap: 4px; }
+.field label { font-size: 12px; color: var(--ink-2); }
+.field input { font: inherit; font-family: var(--mono); font-size: 14px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 200px; max-width: 100%; }
+.field input.sm { width: 120px; }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.preset { font: inherit; font-size: 12px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); border-radius: 999px; padding: 3px 10px; cursor: pointer; }
+.preset:hover, .preset[aria-pressed="true"] { border-color: var(--ink-2); color: var(--ink); background: var(--accent-soft); }
+.yhead { display: grid; gap: 0; }
+.yhead .mesh { font-size: 11px; color: var(--ink-3); font-weight: 400; }
+td .kg { display: block; font-size: 11.5px; color: var(--ink-3); }
+.ybig { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.ybig .dv { min-width: 128px; }
+.search { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 220px; max-width: 100%; }
+details.st { border-top: 1px solid var(--line); }
+details.st summary { cursor: pointer; padding: 8px 2px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+details.st summary .n { font-family: var(--mono); font-weight: 500; }
+details.st summary .lb { color: var(--ink-2); }
+details.st summary .c { color: var(--ink-3); font-size: 12px; margin-left: auto; }
+details.st table td { text-align: left; white-space: normal; overflow-wrap: anywhere; }
+details.st table td.t { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+.pv { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere; padding: 0 2px 8px; }
+.note { color: var(--ink-3); font-size: 12.5px; margin: 0 0 8px; }
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 20; }
+textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-size: 12px; margin-top: 8px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
+@media (prefers-reduced-motion: no-preference) { .chip, .btn { transition: border-color .15s, background .15s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>PSA 입도 뷰어 <small id="ver"></small></h1>
+      <p class="sub">HORIBA LA-960(.ngb)과 Malvern Mastersizer 2000(.mea) 입도분석 결과를 브라우저 안에서만 읽어요. 파일은 이 기기 밖으로 나가지 않습니다.</p>
+    </div>
+    <div class="tools">
+      <label class="btn primary" for="file-input">파일 열기 (.ngb · .mea)</label>
+      <input id="file-input" type="file" accept=".ngb,.mea" multiple hidden>
+    </div>
+  </header>
+
+  <div class="rail" id="rail" aria-label="불러온 파일"></div>
+  <div id="warns"></div>
+
+  <div class="main">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>입도분포</h2>
+        <span class="meta">위: 빈도 q (%) · 아래: 누적 Q (%) · 가로축 로그</span>
+      </div>
+      <div id="chart"></div>
+    </section>
+    <aside class="panel readout" id="readout" aria-live="polite"></aside>
+  </div>
+
+  <section class="panel" id="yield-panel">
+    <div class="panel-head">
+      <h2>수율 계산</h2>
+      <div class="tools"><button class="btn" id="copy-yield" type="button">수율 표 복사</button></div>
+    </div>
+    <div class="ctrl">
+      <div class="field">
+        <label for="cuts">분급 기준 입경 (µm, 쉼표로 여러 개)</label>
+        <input id="cuts" type="text" inputmode="decimal" value="53" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="mass">투입량 (kg, 선택)</label>
+        <input id="mass" class="sm" type="number" min="0" step="any" placeholder="예: 100">
+      </div>
+      <div class="field">
+        <label>자주 쓰는 기준</label>
+        <div class="presets" id="presets">
+          <button class="preset" type="button" data-cuts="25">−25 (500 mesh)</button>
+          <button class="preset" type="button" data-cuts="45">−45 (325 mesh)</button>
+          <button class="preset" type="button" data-cuts="53">−53 (270 mesh)</button>
+          <button class="preset" type="button" data-cuts="106">−106 (140 mesh)</button>
+          <button class="preset" type="button" data-cuts="15, 45">15–45</button>
+          <button class="preset" type="button" data-cuts="15, 53">15–53</button>
+          <button class="preset" type="button" data-cuts="20, 63">20–63</button>
+          <button class="preset" type="button" data-cuts="45, 106">45–106</button>
+        </div>
+      </div>
+    </div>
+    <div class="warn" id="yield-range" hidden style="margin-bottom:12px"></div>
+    <div class="ybig" id="ybig"></div>
+    <div class="tbl-wrap"><table id="yield"></table></div>
+    <p class="note" id="yield-note" style="margin:10px 0 0">누적분포를 측정 채널 사이에서 로그 보간해 계산해요(D10·D50·D90을 구하는 방식과 같음). 레이저 회절 결과라 체 분급 수율과는 입자 형상 때문에 차이가 날 수 있고, 무게 환산은 분포가 부피 기준이면서 입자 밀도가 같다고 가정한 값이에요.</p>
+  </section>
+
+  <section class="panel" id="compare-panel">
+    <div class="panel-head">
+      <h2>결과 비교</h2>
+      <div class="tools"><button class="btn" id="copy-compare" type="button">표 복사 (엑셀 붙여넣기용)</button></div>
+    </div>
+    <div class="tbl-wrap"><table id="compare"></table></div>
+    <p class="note" id="compare-note" hidden style="margin:10px 0 0">변동계수 참고 기준: ISO 13320 반복성 권장치 D50 3% 이하, D10·D90 5% 이하 (D50이 10 µm 이상일 때). 넘는 값은 “초과”로 표시돼요.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 id="dist-title">채널 데이터</h2>
+      <div class="tools"><button class="btn" id="copy-dist" type="button">채널 데이터 복사</button></div>
+    </div>
+    <div class="tbl-wrap scroll"><table id="dist"></table></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 id="raw-title">파싱된 전체 항목</h2>
+      <input class="search" id="raw-search" type="search" placeholder="항목 이름이나 값으로 찾기" aria-label="항목 검색">
+    </div>
+    <p class="note">파일 안의 스트림을 해석한 그대로 보여줘요. 의미가 확인되지 않은 항목도 포함돼 있고, 해석하지 못한 스트림은 앞부분 바이트만 표시합니다.</p>
+    <div id="raw"></div>
+  </section>
+</div>
+<div class="drop" id="drop" hidden>.ngb · .mea 파일을 놓으면 추가돼요</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="version.js"></script>
+<script src="cfb.min.js"></script>
+<script>
+/* LA-960 .ngb parser — OLE(CFB) container → streams → property records / TableData */
+function parseNGB(u8, CFB) {
+  const cfb = CFB.read(u8, { type: 'array' });
+  const streams = [];
+  cfb.FileIndex.forEach((e, i) => {
+    if (e.type !== 2 || !e.content) return;
+    const path = cfb.FullPaths[i].replace(/^Root Entry\//, '').replace(/^[^/]*\//, '');
+    const bytes = e.content instanceof Uint8Array ? e.content : Uint8Array.from(e.content);
+    streams.push({ name: e.name, path, bytes });
+  });
+  const td = new TextDecoder('latin1');
+  const out = { streams: [], props: {}, table: null, warnings: [] };
+
+  for (const s of streams) {
+    const b = s.bytes, dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    const info = { name: s.name, size: b.length, kind: 'binary', labels: [], props: [] };
+    try {
+      if (b.length > 18 && td.decode(b.subarray(0, 13)) === 'TableData Ver') {
+        info.kind = 'table';
+        const cols = parseTable(b, dv, td);
+        info.columns = Object.keys(cols).map(k => ({ name: k, n: cols[k].length }));
+        out.table = out.table || cols;
+      } else {
+        info.labels = readHeader(b, dv, td);
+        const props = parseProps(b, dv, td);
+        if (props.length) {
+          info.kind = 'props';
+          info.props = props;
+        }
+      }
+    } catch (err) {
+      info.kind = 'error';
+      out.warnings.push(`${s.name}: 해석 실패 (${err.message})`);
+    }
+    if (info.kind === 'binary') info.preview = hex(b.subarray(0, 48));
+    out.streams.push(info);
+  }
+  out.streams.sort((a, b) => natural(a.name, b.name));
+  // merge: result streams first, then kernel, then the rest; skip empty strings
+  const rank = s => { const l = s.labels.join('|'); return /ResultItem/.test(l) ? 0 : /DispItem/.test(l) ? 1 : /^Kernel/.test(l) ? 2 : /EquipData/.test(l) ? 4 : 3; };
+  [...out.streams].sort((a, b) => rank(a) - rank(b)).forEach(st => st.props.forEach(p => {
+    if (p.value === '' || p.name in out.props) return; out.props[p.name] = p.value;
+  }));
+  return buildModel(out);
+}
+
+function readHeader(b, dv, td) {
+  const labels = []; let p = 0;
+  for (let k = 1; k <= 3 && p + 8 < b.length; k++) {
+    if (dv.getUint32(p, true) !== k) break;
+    const n = dv.getUint32(p + 4, true);
+    if (n < 1 || n > 80 || p + 8 + n > b.length) break;
+    const lab = b.subarray(p + 8, p + 8 + n - 1);
+    if (!lab.every(c => c > 32 && c < 127)) break;
+    labels.push(td.decode(lab));
+    p += 8 + n;
+  }
+  return labels;
+}
+
+function parseProps(b, dv, td) {
+  const props = []; let i = 0;
+  while (i < b.length - 8) {
+    const t = b[i], nl = dv.getUint16(i + 1, true), vs = dv.getUint32(i + 3, true);
+    const end = i + 7 + nl + vs;
+    if ((t === 0 || t === 2 || t === 3) && nl > 2 && nl < 64 && vs < 100000 && end <= b.length && b[i + 7 + nl - 1] === 0) {
+      let ok = true;
+      for (let j = i + 7; j < i + 7 + nl - 1; j++) if (b[j] <= 32 || b[j] >= 127) { ok = false; break; }
+      if (ok) {
+        const name = td.decode(b.subarray(i + 7, i + 7 + nl - 1));
+        const vo = i + 7 + nl; let value, type;
+        if (t === 3 && vs === 4) { value = dv.getFloat32(vo, true); type = 'float'; }
+        else if (t === 3 && vs % 4 === 0) { value = []; for (let k = 0; k < vs / 4; k++) value.push(dv.getFloat32(vo + 4 * k, true)); type = 'float[]'; }
+        else if (t === 2 && vs === 4) { value = dv.getInt32(vo, true); type = 'int'; }
+        else if (t === 0) { value = decodeStr(b.subarray(vo, vo + vs)); type = 'text'; }
+        else { value = hex(b.subarray(vo, vo + Math.min(vs, 32))); type = 'bytes'; }
+        props.push({ name, type, value });
+        i = end + 1; continue;
+      }
+    }
+    i++;
+  }
+  return props;
+}
+
+function parseTable(b, dv, td) {
+  const cols = {};
+  for (let i = 16; i < b.length - 20; i++) {
+    const n = dv.getUint32(i, true);
+    if (n < 3 || n > 64 || i + 4 + n + 12 > b.length || b[i + 4 + n - 1] !== 0) continue;
+    let ok = true;
+    for (let j = i + 4; j < i + 4 + n - 1; j++) if (b[j] < 48 || b[j] > 122) { ok = false; break; }
+    if (!ok || dv.getUint32(i + 4 + n, true) !== 4) continue;
+    const name = td.decode(b.subarray(i + 4, i + 4 + n - 1));
+    const vals = []; let p = i + 4 + n;
+    while (p + 12 <= b.length && dv.getUint32(p, true) === 4) { vals.push(dv.getFloat64(p + 4, true)); p += 12; }
+    if (vals.length >= 10) { cols[name] = vals; i = p - 1; }
+  }
+  return cols;
+}
+
+function buildModel(raw) {
+  const P = raw.props;
+  const num = k => (typeof P[k] === 'number' && P[k] > -999 ? P[k] : null);
+  const T = raw.table || {};
+  const x = T.Diameter, q = T.HORFrequency, Q = T.HORCumulation;
+  let dist = null;
+  if (x && q && Q && x.length === q.length && q.length === Q.length) dist = { x, q, Q };
+  else raw.warnings.push('입도분포 테이블(Diameter / HORFrequency / HORCumulation)을 찾지 못했어요.');
+
+  const d10 = num('Result_D10') ?? num('Result_Dvol_10'), d50 = num('Result_Median') ?? num('Result_Dvol_50'), d90 = num('Result_D90') ?? num('Result_Dvol_90');
+  const t = P.MeasTime;
+  const results = {
+    D10: d10, D50: d50, D90: d90,
+    Span: d10 != null && d50 && d90 != null ? (d90 - d10) / d50 : null,
+    Mode: num('Result_Mode'), Mean: num('Result_MeanSize'), SD: num('Result_SD'), CV: num('Result_CV'),
+    GeoMean: num('Result_GeoMeanSize'), GeoSD: num('Result_GeoSD'),
+    Skewness: num('Result_skewness'), Kurtosis: num('Result_kurtosis'), SSA: num('Result_sp_area'),
+  };
+  // check: D50 from cumulative (log interpolation) vs stored
+  let d50calc = null;
+  if (dist) {
+    for (let i = 1; i < dist.Q.length; i++) if (dist.Q[i - 1] < 50 && dist.Q[i] >= 50) {
+      const f = (50 - dist.Q[i - 1]) / (dist.Q[i] - dist.Q[i - 1]);
+      d50calc = Math.exp(Math.log(dist.x[i - 1]) + f * (Math.log(dist.x[i]) - Math.log(dist.x[i - 1]))); break;
+    }
+  }
+  return {
+    meta: {
+      sample: P.SampleName || P.SampleComment || '(이름 없음)',
+      dataId: P.DataID || '', model: P.ModelType || P.Kernel_Model || '', mfgNo: P.MfgNo || P.MFGNo || '',
+      version: P.ShortVersion || '', dispersant: P.DispName || '',
+      ri: P.SampleRIndex != null ? `${fix(P.SampleRIndex, 2)} – ${fix(P.SampleIIndex, 2)}i` : '',
+      wavelength: P.Data_LD ? `${P.Data_LD} / ${P.Data_LED} nm` : '',
+      trans: num('TperL'), measTime: typeof t === 'number' && t > 0 ? new Date(t * 1000) : null,
+      distType: P.DistributionType, feeder: typeof P.Feeder_Power === 'number' ? P.Feeder_Power : null,
+    },
+    results, d50calc, dist, streams: raw.streams, warnings: raw.warnings,
+  };
+}
+
+function decodeStr(u) {
+  let end = u.length; while (end > 0 && u[end - 1] === 0) end--;
+  const s = u.subarray(0, end);
+  try { return new TextDecoder('utf-8', { fatal: true }).decode(s); } catch (e) {}
+  try { return new TextDecoder('euc-kr').decode(s); } catch (e) {}
+  return new TextDecoder('latin1').decode(s);
+}
+function hex(u) { return Array.from(u, v => v.toString(16).padStart(2, '0')).join(' '); }
+function fix(v, d) { return typeof v === 'number' ? v.toFixed(d) : String(v); }
+function natural(a, b) { return a.localeCompare(b, undefined, { numeric: true }); }
+
+if (typeof module !== 'undefined') module.exports = { parseNGB };
+
+/* Malvern Mastersizer 2000 .mea parser — one file holds several measurement records.
+   Record field = [type u16][01 + 8×00][tag u16][payload by type]. */
+const MEA_LABELS = {
+  0x00: '시료명', 0x03: '분석 시각', 0x04: '작업자', 0x10: '물질명', 0x11: '입자 굴절률', 0x12: '입자 흡수율',
+  0x14: '분산매', 0x15: '분산매 굴절률', 0x28: '분산 장치', 0x60: '장비 일련번호', 0x6e: '측정 시각',
+  0x75: '구간별 부피 %', 0x76: '구간 경계 (µm)', 0x7b: 'D10 (µm)', 0x7c: 'D20 (µm, 추정)', 0x7d: 'D50 (µm)',
+  0x7e: 'D80 (µm, 추정)', 0x7f: 'D90 (µm)', 0x80: 'D[4,3] (µm)', 0x81: 'D[3,2] (µm)', 0x82: '비표면적 (m²/g, 밀도 1 기준)',
+  0x83: 'Span', 0x101: '저장 시각', 0x102: '저장 사용자', 0x11e: '원래 파일 경로',
+};
+function parseMEA(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let kr; try { kr = new TextDecoder('euc-kr'); } catch (e) { kr = new TextDecoder('latin1'); }
+  const isHdr = i => { if (u8[i + 2] !== 1) return false; for (let k = 3; k < 11; k++) if (u8[i + k] !== 0) return false; return true; };
+  const fields = []; let i = 0;
+  while (i < u8.length - 13) {
+    if (!isHdr(i)) { i++; continue; }
+    const t = dv.getUint16(i, true); let p = i + 11;
+    if (t === 0x0566) { fields.push({ t, tag: null }); i = p; continue; }
+    const tag = dv.getUint16(p, true); p += 2; let v, type;
+    try {
+      if (t === 0x0630) { v = dv.getFloat32(p, true); p += 4; type = 'float'; }
+      else if (t === 0x0708 || t === 0x08c1) { v = dv.getInt32(p, true); p += 4; type = 'int'; }
+      else if (t === 0x0747) { v = dv.getFloat64(p, true); p += 8; type = 'double'; }
+      else if (t === 0x06b1) { const n = dv.getUint32(p, true); p += 4; if (n > 4096) throw 0; v = kr.decode(u8.subarray(p, p + n)); p += n; type = 'text'; }
+      else if (t === 0x082f) { const n = dv.getUint32(p, true); p += 4; if (n > 4096) throw 0; v = []; for (let k = 0; k < n; k++) v.push(dv.getFloat32(p + 4 * k, true)); p += 4 * n; type = 'float[]'; }
+      else if (t === 0x06f5) { v = u8[p]; p += 1; type = 'flag'; }
+      else if (t === 0x0666) { v = dv.getUint16(p, true); p += 2; type = 'group'; }
+      else if (t === 0x08a9) { v = Array.from(u8.subarray(p, p + 37), b => b.toString(16).padStart(2, '0')).join(' '); p += 37; type = 'bytes'; }
+      else { i++; continue; }
+    } catch (e) { i++; continue; }
+    fields.push({ t, tag, type, value: v }); i = p;
+  }
+  // split into records at each 0x011f group marker
+  const recs = []; let cur = null;
+  for (const f of fields) {
+    if (f.type === 'group' && f.tag === 0x11f) { if (cur) recs.push(cur); cur = []; continue; }
+    if (cur && f.tag != null && f.type !== 'group') cur.push(f);
+  }
+  if (cur) recs.push(cur);
+  const ole = d => typeof d === 'number' && d > 1 ? new Date(Date.UTC(1899, 11, 30) + d * 864e5) : null;
+  const models = recs.map((fs, k) => {
+    const F = {}; fs.forEach(f => { if (!(f.tag in F)) F[f.tag] = f.value; });
+    const warnings = [];
+    let dist = null, d50calc = null;
+    const e = F[0x76], q = F[0x75];
+    if (Array.isArray(e) && Array.isArray(q) && e.length === q.length + 1) {
+      const Q = [0]; q.forEach(v => Q.push(Q.at(-1) + v));
+      dist = { x: e.slice(), q: [0, ...q], Q };
+      for (let j = 1; j < Q.length; j++) if (Q[j - 1] < 50 && Q[j] >= 50) {
+        const tt = (50 - Q[j - 1]) / (Q[j] - Q[j - 1]);
+        d50calc = Math.exp(Math.log(e[j - 1]) + tt * (Math.log(e[j]) - Math.log(e[j - 1]))); break;
+      }
+    } else warnings.push('입도분포(구간 경계 / 구간별 부피 %)를 찾지 못했어요.');
+    const num = t => (typeof F[t] === 'number' && isFinite(F[t]) ? F[t] : null);
+    // the instrument stores times as local wall-clock OLE dates; show them as-is
+    const local = d => { const u = ole(d); return u ? new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds()) : null; };
+    const disp = F[0x14] || '';
+    return {
+      kind: 'mea', record: k + 1, records: recs.length,
+      meta: {
+        sample: F[0x00] || `기록 ${k + 1}`, material: F[0x10] || '', dataId: `기록 ${k + 1}/${recs.length}`,
+        model: 'Mastersizer 2000', mfgNo: F[0x60] || '', dispersant: disp ? `${disp}` : '건식 (공기)', unit: F[0x28] || '',
+        ri: num(0x11) != null ? `${num(0x11).toFixed(2)} (흡수 ${num(0x12) != null ? +num(0x12).toFixed(3) : '—'})` : '',
+        measTime: local(F[0x6e]) || local(F[0x03]), source: F[0x11e] || '', operator: F[0x04] || '',
+      },
+      results: {
+        D10: num(0x7b), D50: num(0x7d), D90: num(0x7f), Span: num(0x83), D43: num(0x80), D32: num(0x81), SSA_m2g: num(0x82),
+        D20: num(0x7c), D80: num(0x7e), Mean: num(0x80), Mode: null, CV: null, SSA: null,
+      },
+      d50calc, dist, warnings,
+      streams: [{ name: `기록 ${k + 1}`, kind: 'props', size: 0, labels: [F[0x00] || ''],
+        props: fs.map(f => ({ name: `${MEA_LABELS[f.tag] ? MEA_LABELS[f.tag] + ' · ' : ''}0x${f.tag.toString(16).padStart(2, '0')}`, type: f.type,
+          value: f.type === 'double' && f.value > 30000 && f.value < 80000 ? `${f.value} (${(local(f.value) || '').toLocaleString?.('ko-KR') || ''})` : f.value })) }],
+      rawSignature: (F[0x6f] || []).reduce((a, b) => a + b, 0),
+    };
+  });
+  // same raw scattering signal in two records → flag it
+  models.forEach((m, a) => models.forEach((n, b) => {
+    if (a < b && m.rawSignature && Math.abs(m.rawSignature - n.rawSignature) < 1e-3 * m.rawSignature) {
+      const same = Math.abs((m.results.D50 || 0) - (n.results.D50 || 0)) < 1e-6;
+      const msg = (o, other) => `기록 ${other.record}(${other.meta.sample})와 같은 측정 원자료예요${same ? '' : ' (다른 광학 조건으로 재계산된 값)'}.`;
+      m.warnings.push(msg(m, n)); n.warnings.push(msg(n, m));
+    }
+  }));
+  return models;
+}
+if (typeof module !== 'undefined') module.exports = { parseMEA };
+
+</script>
+<script src="sample.js"></script>
+<script>
+const COLORS = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
+const state = { files: [], active: null, nextColor: 0 };
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const f = (v, d = 2) => (v == null || !isFinite(v) ? '—' : v.toFixed(d));
+const fmtTime = d => d ? d.toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }) : '—';
+const col = e => `var(${e.color})`;
+const pad2 = n => String(n).padStart(2, '0');
+const shortTime = d => d ? `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : '';
+// same sample name in several files (repeat runs) → add the measurement time so each is identifiable
+const label = e => state.files.filter(o => o.model.meta.sample === e.model.meta.sample).length > 1 ? `${e.model.meta.sample} · ${shortTime(e.model.meta.measTime)}` : e.model.meta.sample;
+
+function parseFile(name, u8) {
+  try { return parseNGB(u8, CFB); }
+  catch (err) { toast(`${name}: 열 수 없는 파일이에요. LA-960 .ngb 파일인지 확인해 주세요.`); return null; }
+}
+function addFile(name, u8, isSample, parsed) {
+  const model = parsed || parseFile(name, u8);
+  if (!model) return;
+  const used = new Set(state.files.map(x => x.color));
+  let color = COLORS.find(c => !used.has(c));
+  if (!color) { toast('최대 8개 파일까지 겹쳐 볼 수 있어요. 하나를 닫고 다시 추가해 주세요.'); return; }
+  const entry = { id: Math.random().toString(36).slice(2), name, model, color, isSample };
+  state.files.push(entry); state.active = entry.id;
+  state.files.sort((a, b) => (a.model.meta.measTime || 0) - (b.model.meta.measTime || 0));
+  render();
+}
+function removeFile(id) {
+  state.files = state.files.filter(x => x.id !== id);
+  if (state.active === id) state.active = state.files.length ? state.files[state.files.length - 1].id : null;
+  render();
+}
+const activeFile = () => state.files.find(x => x.id === state.active);
+
+async function readFiles(list) {
+  const batch = [];
+  for (const file of list) {
+    const u8 = new Uint8Array(await file.arrayBuffer());
+    if (/\.ngb$/i.test(file.name)) {
+      const model = parseFile(file.name, u8);
+      if (model) batch.push({ name: file.name, model });
+    } else if (/\.mea$/i.test(file.name)) {
+      let ms = [];
+      try { ms = parseMEA(u8); } catch (err) { ms = []; }
+      if (!ms.length) { toast(`${file.name}: 측정 기록을 찾지 못했어요. Mastersizer 2000 .mea 파일인지 확인해 주세요.`); continue; }
+      ms.forEach(m => batch.push({ name: ms.length > 1 ? `${file.name} · 기록 ${m.record}/${m.records}` : file.name, model: m }));
+      if (ms.length > 1) toast(`${file.name}: 측정 기록 ${ms.length}건을 불러왔어요`);
+    } else toast(`${file.name}: .ngb 또는 .mea 파일만 열 수 있어요.`);
+  }
+  if (!batch.length) return;
+  const room = 8 - state.files.filter(x => !x.isSample).length;
+  if (batch.length > room) { toast(`한 번에 8개까지 겹쳐 볼 수 있어요. ${batch.length - room}개는 빼고 불러왔어요.`); batch.splice(room); }
+  // replace the bundled sample once real files arrive; add in measurement order so colours follow time
+  state.files.filter(x => x.isSample).forEach(x => removeFile(x.id));
+  batch.sort((a, b) => (a.model.meta.measTime || 0) - (b.model.meta.measTime || 0));
+  batch.forEach(b => addFile(b.name, null, false, b.model));
+}
+
+function render() { renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderDist(); renderRaw(); }
+
+function renderRail() {
+  const r = $('rail');
+  if (!state.files.length) { r.innerHTML = '<span class="hint" style="margin-left:0">.ngb · .mea 파일을 이 창에 끌어다 놓거나 “파일 열기”를 눌러 주세요.</span>'; return; }
+  r.innerHTML = state.files.map(e => `
+    <span class="chip" role="button" tabindex="0" aria-pressed="${e.id === state.active}" data-id="${e.id}" title="${esc(e.name)}">
+      <span class="sw" style="background:${col(e)}"></span><span class="nm">${esc(label(e))}</span>
+      ${e.isSample ? '<span class="tag">예시 파일</span>' : ''}
+      <button class="x" type="button" aria-label="${esc(e.name)} 닫기" data-close="${e.id}">×</button>
+    </span>`).join('') + '<span class="hint">파일을 더 끌어다 놓으면 겹쳐서 비교돼요</span>';
+}
+$('rail').addEventListener('click', ev => {
+  const c = ev.target.closest('[data-close]'); if (c) { ev.stopPropagation(); removeFile(c.dataset.close); return; }
+  const chip = ev.target.closest('.chip'); if (chip) { state.active = chip.dataset.id; render(); }
+});
+$('rail').addEventListener('keydown', ev => {
+  const chip = ev.target.closest('.chip'); if (chip && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); state.active = chip.dataset.id; render(); }
+});
+
+function renderWarns() {
+  const e = activeFile();
+  $('warns').innerHTML = e && e.model.warnings.length ? `<div class="warn">${e.model.warnings.map(esc).join('<br>')}</div>` : '';
+}
+
+/* ---------- chart ---------- */
+let W = 720; const H = 470, ML = 52, MR = 16, PT1 = 14, PH1 = 170, GAP = 34, PH2 = 190, MB = 44;
+const PT2 = PT1 + PH1 + GAP;
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p; return v; }
+function renderChart() {
+  const box = $('chart');
+  const files = state.files.filter(e => e.model.dist);
+  if (!files.length) { box.innerHTML = '<p class="note">표시할 입도분포 데이터가 없어요.</p>'; return; }
+  W = Math.max(340, Math.min(720, Math.round(box.clientWidth || 720)));
+  let lo = Infinity, hi = 0, qmax = 0;
+  files.forEach(e => { const { x, q } = e.model.dist; q.forEach((v, i) => { if (v > 0) { lo = Math.min(lo, x[Math.max(0, i - 1)]); hi = Math.max(hi, x[i]); qmax = Math.max(qmax, v); } }); });
+  const L0 = Math.floor(Math.log10(lo)), L1 = Math.ceil(Math.log10(hi));
+  const X = d => ML + (Math.log10(d) - L0) / (L1 - L0) * (W - ML - MR);
+  const ymax = niceMax(qmax * 1.12);
+  const Y1 = v => PT1 + PH1 - v / ymax * PH1, Y2 = v => PT2 + PH2 - v / 100 * PH2;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="입도분포 그래프" font-family="var(--sans)" font-size="12">`;
+  // grids
+  let g = '';
+  for (let p = L0; p <= L1; p++) for (let m = 1; m < 10; m++) {
+    const d = m * Math.pow(10, p); if (p === L1 && m > 1) break;
+    const xx = X(d).toFixed(1), major = m === 1;
+    g += `<line x1="${xx}" x2="${xx}" y1="${PT1}" y2="${PT1 + PH1}" stroke="var(--grid)" stroke-width="${major ? 1 : .6}"/>`;
+    g += `<line x1="${xx}" x2="${xx}" y1="${PT2}" y2="${PT2 + PH2}" stroke="var(--grid)" stroke-width="${major ? 1 : .6}"/>`;
+    if (m === 1 || m === 2 || m === 5) g += `<text x="${xx}" y="${PT2 + PH2 + 18}" text-anchor="middle" fill="${major ? 'var(--ink-2)' : 'var(--ink-3)'}" class="num">${fmtD(d)}</text>`;
+  }
+  const qstep = niceMax(ymax / 5);
+  for (let v = 0; v <= ymax + 1e-9; v += qstep) g += `<line x1="${ML}" x2="${W - MR}" y1="${Y1(v)}" y2="${Y1(v)}" stroke="var(--grid)"/><text x="${ML - 8}" y="${Y1(v) + 4}" text-anchor="end" fill="var(--ink-2)" class="num">${+v.toFixed(2)}</text>`;
+  for (let v = 0; v <= 100; v += 20) g += `<line x1="${ML}" x2="${W - MR}" y1="${Y2(v)}" y2="${Y2(v)}" stroke="var(--grid)"/><text x="${ML - 8}" y="${Y2(v) + 4}" text-anchor="end" fill="var(--ink-2)" class="num">${v}</text>`;
+  s += g;
+  s += `<line x1="${ML}" x2="${W - MR}" y1="${PT1 + PH1}" y2="${PT1 + PH1}" stroke="var(--ink-3)"/><line x1="${ML}" x2="${W - MR}" y1="${PT2 + PH2}" y2="${PT2 + PH2}" stroke="var(--ink-3)"/>`;
+  s += `<text x="14" y="${PT1 + PH1 / 2}" transform="rotate(-90 14 ${PT1 + PH1 / 2})" text-anchor="middle" fill="var(--ink-2)">q (%)</text>`;
+  s += `<text x="14" y="${PT2 + PH2 / 2}" transform="rotate(-90 14 ${PT2 + PH2 / 2})" text-anchor="middle" fill="var(--ink-2)">Q (%)</text>`;
+  s += `<text x="${(ML + W - MR) / 2}" y="${H - 6}" text-anchor="middle" fill="var(--ink-2)">입경 (µm)</text>`;
+  s += `<defs><clipPath id="clip"><rect x="${ML}" y="0" width="${W - ML - MR}" height="${H}"/></clipPath></defs><g clip-path="url(#clip)">`;
+  const act = activeFile();
+  const order = [...files.filter(e => e !== act), ...files.filter(e => e === act)];
+  order.forEach(e => {
+    const { x, q, Q } = e.model.dist, c = col(e), isAct = e === act;
+    if (files.length === 1) {
+      for (let i = 1; i < x.length; i++) if (q[i] > 0) {
+        const x0 = X(x[i - 1]) + 1, x1 = X(x[i]) - 1;
+        s += `<path d="M${x0} ${Y1(0)}V${Y1(q[i]) + 3}q0 -3 3 -3H${x1 - 3}q3 0 3 3V${Y1(0)}Z" fill="${c}"/>`;
+      }
+    } else {
+      let d = `M${X(x[0])} ${Y1(0)}`;
+      for (let i = 1; i < x.length; i++) d += `H${X(x[i - 1]).toFixed(1)}V${Y1(q[i]).toFixed(1)}H${X(x[i]).toFixed(1)}`;
+      s += `<path d="${d}" fill="${c}" fill-opacity="${isAct ? .16 : .06}" stroke="${c}" stroke-width="${isAct ? 2 : 1.5}" stroke-linejoin="round"/>`;
+    }
+    s += `<polyline points="${x.map((d, i) => `${X(d).toFixed(1)},${Y2(Q[i]).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="${isAct ? 2.25 : 1.5}" stroke-linejoin="round"/>`;
+  });
+  s += '</g>';
+  // D markers for active file
+  if (act && act.model.dist) {
+    const r = act.model.results;
+    [['D10', r.D10, 10], ['D50', r.D50, 50], ['D90', r.D90, 90]].forEach(([k, v, p]) => {
+      if (v == null || v <= Math.pow(10, L0) || v >= Math.pow(10, L1)) return;
+      const xx = X(v), yy = Y2(p);
+      s += `<line x1="${xx}" x2="${xx}" y1="${yy}" y2="${PT2 + PH2}" stroke="var(--ink-3)" stroke-dasharray="3 3"/>`;
+      s += `<circle cx="${xx}" cy="${yy}" r="4.5" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.5"/>`;
+      s += `<text x="${xx + 9}" y="${yy + 14}" fill="var(--ink)" font-size="11.5"><tspan font-weight="600">${k}</tspan> <tspan class="num">${f(v)} µm</tspan></text>`;
+    });
+  }
+  // classification cuts
+  if (act && act.model.dist) state.cuts.forEach(c => {
+    if (c <= Math.pow(10, L0) || c >= Math.pow(10, L1)) return;
+    const xx = X(c), u = underAt(act.model.dist, c);
+    s += `<line x1="${xx}" x2="${xx}" y1="${PT1}" y2="${PT2 + PH2}" stroke="var(--warn)" stroke-width="1.25"/>`;
+    s += `<text x="${xx + 5}" y="${PT2 + 12}" fill="var(--warn)" font-size="11.5" font-weight="600">${+c} µm<tspan font-weight="400" class="num"> · 이하 ${f(u, 1)}%</tspan></text>`;
+  });
+  s += `<line id="cross" x1="0" x2="0" y1="${PT1}" y2="${PT2 + PH2}" stroke="var(--ink-2)" stroke-width="1" visibility="hidden"/>`;
+  s += `<rect id="hit" x="${ML}" y="${PT1}" width="${W - ML - MR}" height="${PT2 + PH2 - PT1}" fill="transparent"/>`;
+  const mixed = new Set(files.map(e => e.model.kind || 'ngb')).size > 1;
+  s += '</svg><div class="tip" id="tip" hidden></div>';
+  if (mixed) s += '<p class="note" style="margin:8px 0 0">LA-960과 Mastersizer는 측정 채널 폭이 달라 빈도(q) 높이를 직접 비교하기 어려워요. 누적(Q) 곡선과 D값으로 비교해 주세요. 측정 방식(건식/습식)도 다를 수 있어요.</p>';
+  box.innerHTML = s;
+
+  const svg = box.querySelector('svg'), tip = $('tip'), cross = $('cross');
+  const ref = (act && act.model.dist) ? act : files[0];
+  const move = ev => {
+    const pt = svg.getBoundingClientRect(), sx = (ev.clientX - pt.left) * W / pt.width;
+    const d = Math.pow(10, L0 + (sx - ML) / (W - ML - MR) * (L1 - L0));
+    const xs = ref.model.dist.x; let i = 0, best = Infinity;
+    xs.forEach((v, k) => { const dd = Math.abs(Math.log(v / d)); if (dd < best) { best = dd; i = k; } });
+    const xx = X(xs[i]); cross.setAttribute('x1', xx); cross.setAttribute('x2', xx); cross.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<div class="hd">${fmtD(xs[i], true)} µm</div>` + files.map(e => {
+      const k = e.model.dist.x.findIndex(v => Math.abs(v / xs[i] - 1) < 1e-3);
+      const Qv = k < 0 ? underAt(e.model.dist, xs[i]) : e.model.dist.Q[k];
+      return `<div class="row"><span class="sw" style="background:${col(e)}"></span><span class="l">${esc(label(e))}</span><span>q ${k < 0 ? '—' : f(e.model.dist.q[k])}</span><span>Q ${f(Qv)}${k < 0 ? '*' : ''}</span></div>`;
+    }).join('') + (mixed ? '<div class="row" style="grid-template-columns:1fr"><span class="l">* 채널이 달라 누적값을 보간함</span></div>' : '');
+    tip.hidden = false;
+    const bx = box.getBoundingClientRect(), px = ev.clientX - bx.left, py = ev.clientY - bx.top;
+    const tw = tip.offsetWidth; tip.style.left = Math.min(Math.max(0, px + 14 + tw > bx.width ? px - tw - 14 : px + 14), bx.width - tw) + 'px'; tip.style.top = Math.max(0, py - 20) + 'px';
+  };
+  const hit = $('hit');
+  hit.addEventListener('pointermove', move);
+  hit.addEventListener('pointerdown', move);
+  hit.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
+}
+function fmtD(d, precise) {
+  if (precise) return d >= 100 ? d.toFixed(1) : d >= 1 ? d.toFixed(3) : d.toPrecision(3);
+  return d >= 1 ? String(+d.toFixed(0)) : String(+d.toPrecision(1));
+}
+
+/* ---------- readout ---------- */
+function renderReadout() {
+  const e = activeFile(), r = $('readout');
+  if (!e) { r.innerHTML = '<p class="note">파일을 열면 측정 결과가 여기에 표시돼요.</p>'; return; }
+  const m = e.model.meta, v = e.model.results;
+  const diff = e.model.d50calc && v.D50 ? Math.abs(e.model.d50calc / v.D50 - 1) * 100 : null;
+  r.innerHTML = `
+    <div class="sample"><span class="sw" style="background:${col(e)}"></span>${esc(m.sample)}</div>
+    <div class="when" style="margin-bottom:2px">${esc(e.name)}</div>
+    <div class="when">${fmtTime(m.measTime)} · ${esc(e.model.kind === 'mea' ? 'Malvern ' + m.model : 'HORIBA ' + (m.model || 'LA-960'))}${e.isSample ? ' · 예시 파일' : ''}</div>
+    <div class="dvals">
+      ${['D10', 'D50', 'D90'].map(k => `<div class="dv"><div class="k">${k}</div><div class="v">${f(v[k])}</div><div class="u">µm</div></div>`).join('')}
+    </div>
+    ${e.model.kind === 'mea' ? `<dl class="kv">
+      <dt>Span</dt><dd>${f(v.Span, 3)}</dd>
+      <dt>D[4,3] 부피평균</dt><dd>${f(v.D43)} µm</dd>
+      <dt>D[3,2] 면적평균</dt><dd>${f(v.D32)} µm</dd>
+      <dt>D20 / D80 (추정)</dt><dd>${f(v.D20)} / ${f(v.D80)} µm</dd>
+      <dt>비표면적*</dt><dd>${f(v.SSA_m2g, 4)} m²/g</dd>
+      <dt>물질 / 굴절률</dt><dd>${esc(m.material || '—')} · ${esc(m.ri || '—')}</dd>
+      <dt>분산매</dt><dd>${esc(m.dispersant)}</dd>
+      <dt>분산 장치</dt><dd>${esc(m.unit || '—')}</dd>
+      <dt>기록</dt><dd>${esc(m.dataId)}</dd>
+      <dt>작업자</dt><dd>${esc(m.operator || '—')}</dd>
+      <dt>장비 번호</dt><dd>${esc(m.mfgNo || '—')}</dd>
+      <dt>원래 위치</dt><dd style="font-size:11.5px">${esc(m.source || '—')}</dd>
+    </dl><div class="check">* 입자 밀도 1 g/cm³ 기준으로 장비가 계산한 값</div>` : `<dl class="kv">
+      <dt>Span</dt><dd>${f(v.Span)}</dd>
+      <dt>Mode</dt><dd>${f(v.Mode)} µm</dd>
+      <dt>평균 (Mean)</dt><dd>${f(v.Mean)} µm</dd>
+      <dt>표준편차 (SD)</dt><dd>${f(v.SD)} µm</dd>
+      <dt>CV</dt><dd>${f(v.CV, 1)} %</dd>
+      <dt>기하평균</dt><dd>${f(v.GeoMean)} µm</dd>
+      <dt>왜도 / 첨도</dt><dd>${f(v.Skewness)} / ${f(v.Kurtosis)}</dd>
+      <dt>비표면적</dt><dd>${v.SSA == null ? '—' : Math.round(v.SSA).toLocaleString()} cm²/cm³</dd>
+      <dt>굴절률</dt><dd>${esc(m.ri || '—')}</dd>
+      <dt>분산매</dt><dd>${esc(m.dispersant || '—')}</dd>
+      <dt>피더 출력</dt><dd>${m.feeder == null ? '—' : m.feeder}</dd>
+      <dt>투과율 (레이저)</dt><dd>${f(m.trans, 1)} %</dd>
+      <dt>광원 파장</dt><dd>${esc(m.wavelength || '—')}</dd>
+      <dt>Data ID</dt><dd>${esc(m.dataId || '—')}</dd>
+      <dt>장비 번호</dt><dd>${esc(m.mfgNo || '—')}</dd>
+      <dt>소프트웨어</dt><dd>${esc(m.version ? 'v' + m.version : '—')}</dd>
+    </dl>`}
+    <div class="check">${diff == null ? 'D50 교차검증 불가 (누적분포 또는 결과값 없음)' : `누적분포로 다시 계산한 D50 ${f(e.model.d50calc, 3)} µm · 장비 값과 차이 ${diff < 0.01 ? '0.01% 미만' : f(diff, 2) + '%'}`}</div>`;
+}
+
+/* ---------- compare ---------- */
+const CMP = [['D10', 'D10 (µm)', 2], ['D50', 'D50 (µm)', 2], ['D90', 'D90 (µm)', 2], ['Span', 'Span', 2], ['Mode', 'Mode (µm)', 2], ['Mean', 'Mean (µm)', 2], ['CV', 'CV (%)', 1], ['SSA', '비표면적 (cm²/cm³)', 0]];
+const ISO = { D10: 5, D50: 3, D90: 5 }; // ISO 13320 repeatability guide (CV %), for x50 > 10 µm
+function stats(key) {
+  const v = state.files.map(e => e.model.results[key]).filter(x => x != null && isFinite(x));
+  if (v.length < 2) return null;
+  const m = v.reduce((a, b) => a + b, 0) / v.length, sd = Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1));
+  return { m, sd, rsd: m ? sd / m * 100 : null };
+}
+function renderCompare() {
+  const t = $('compare'), note = $('compare-note');
+  if (!state.files.length) { t.innerHTML = ''; note.hidden = true; return; }
+  let html = `<thead><tr><th>시료</th><th class="l">파일</th><th>측정 일시</th>${CMP.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>` +
+    state.files.map(e => `<tr class="${e.id === state.active ? 'active' : ''}"><td class="txt"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${col(e)}"></span>${esc(label(e))}</td><td class="txt fn" title="${esc(e.name)}">${esc(e.name)}</td><td>${fmtTime(e.model.meta.measTime)}</td>${CMP.map(c => `<td>${f(e.model.results[c[0]], c[2])}</td>`).join('')}</tr>`).join('') + '</tbody>';
+  if (state.files.length >= 2) {
+    const st = Object.fromEntries(CMP.map(c => [c[0], stats(c[0])]));
+    html += `<tfoot><tr><td class="txt">평균 (n=${state.files.length})</td><td></td><td></td>${CMP.map(c => `<td>${st[c[0]] ? f(st[c[0]].m, c[2]) : '—'}</td>`).join('')}</tr>
+      <tr><td class="txt">표준편차</td><td></td><td></td>${CMP.map(c => `<td>${st[c[0]] ? f(st[c[0]].sd, c[2] + 1) : '—'}</td>`).join('')}</tr>
+      <tr><td class="txt">변동계수 (%)</td><td></td><td></td>${CMP.map(c => { const x = st[c[0]]; if (!x || x.rsd == null) return '<td>—</td>'; const over = ISO[c[0]] && x.rsd > ISO[c[0]]; return `<td class="${over ? 'over' : ''}">${f(x.rsd, 1)}${over ? ' 초과' : ''}</td>`; }).join('')}</tr></tfoot>`;
+    note.hidden = false;
+  } else note.hidden = true;
+  t.innerHTML = html;
+}
+$('copy-compare').addEventListener('click', ev => {
+  const rows = [['시료', '파일', '측정 일시', ...CMP.map(c => c[1])]].concat(state.files.map(e => [label(e), e.name, fmtTime(e.model.meta.measTime), ...CMP.map(c => f(e.model.results[c[0]], c[2]))]));
+  if (state.files.length >= 2) {
+    const st = CMP.map(c => stats(c[0]));
+    rows.push(['평균', '', '', ...st.map((x, i) => x ? f(x.m, CMP[i][2]) : '')]);
+    rows.push(['표준편차', '', '', ...st.map((x, i) => x ? f(x.sd, CMP[i][2] + 1) : '')]);
+    rows.push(['변동계수 (%)', '', '', ...st.map(x => x && x.rsd != null ? f(x.rsd, 1) : '')]);
+  }
+  copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '결과 비교 표를 복사했어요');
+});
+
+/* ---------- channel table ---------- */
+function renderDist() {
+  const files = state.files.filter(e => e.model.dist), t = $('dist');
+  if (!files.length) { t.innerHTML = ''; return; }
+  const base = (activeFile() && activeFile().model.dist) ? activeFile() : files[0];
+  $('dist-title').textContent = `채널 데이터 (${base.model.dist.x.length}채널)`;
+  t.innerHTML = `<thead><tr><th>입경 (µm)</th>${files.map(e => `<th>${esc(label(e))} q (%)</th><th>Q (%)</th>`).join('')}</tr></thead><tbody>` +
+    base.model.dist.x.map((d, i) => `<tr><td>${fmtD(d, true)}</td>${files.map(e => { const k = e.model.dist.x.findIndex(v => Math.abs(v / d - 1) < 1e-3); return `<td>${k < 0 ? '—' : e.model.dist.q[k].toFixed(3)}</td><td>${k < 0 ? '—' : e.model.dist.Q[k].toFixed(3)}</td>`; }).join('')}</tr>`).join('') + '</tbody>';
+}
+$('copy-dist').addEventListener('click', ev => {
+  const files = state.files.filter(e => e.model.dist); if (!files.length) return;
+  const base = (activeFile() && activeFile().model.dist) ? activeFile() : files[0];
+  const rows = [['입경 (µm)', ...files.flatMap(e => [`${label(e)} q (%)`, `${label(e)} Q (%)`])]];
+  base.model.dist.x.forEach(d => rows.push([d.toFixed(4), ...files.flatMap(e => { const k = e.model.dist.x.findIndex(v => Math.abs(v / d - 1) < 1e-3); return k < 0 ? ['', ''] : [e.model.dist.q[k].toFixed(4), e.model.dist.Q[k].toFixed(4)]; })]));
+  copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '채널 데이터를 복사했어요');
+});
+
+/* ---------- raw explorer ---------- */
+function renderRaw() {
+  const e = activeFile(), box = $('raw');
+  if (!e) { box.innerHTML = ''; return; }
+  $('raw-title').textContent = `파싱된 전체 항목 · ${e.model.meta.sample}`;
+  const qy = $('raw-search').value.trim().toLowerCase();
+  const show = v => Array.isArray(v) ? `[${v.length}개] ${v.slice(0, 8).map(n => +n.toPrecision(5)).join(', ')}${v.length > 8 ? ', …' : ''}` : typeof v === 'number' ? String(+v.toPrecision(7)) : v === '' ? '(빈 값)' : v;
+  let html = '', shown = 0;
+  e.model.streams.forEach(st => {
+    const label = st.labels.filter((x, i, a) => a.indexOf(x) === i).join(' · ');
+    let rows = st.props;
+    if (qy) rows = rows.filter(p => p.name.toLowerCase().includes(qy) || String(show(p.value)).toLowerCase().includes(qy));
+    if (qy && !rows.length && !(st.name + label).toLowerCase().includes(qy)) return;
+    shown++;
+    const count = st.kind === 'props' ? `${st.props.length}개 항목` : st.kind === 'table' ? `분포 테이블 · ${st.columns.map(c => c.name).join(', ')}` : st.kind === 'error' ? '해석 실패' : `해석 안 됨 · ${st.size.toLocaleString()} B`;
+    html += `<details class="st"${qy && rows.length ? ' open' : ''}><summary><span class="n">${esc(st.name)}</span><span class="lb">${esc(label)}</span><span class="c">${count}</span></summary>`;
+    if (st.kind === 'props') html += `<div class="tbl-wrap"><table><tbody>${rows.map(p => `<tr><td style="width:38%">${esc(p.name)}</td><td class="t">${p.type}</td><td>${esc(show(p.value))}</td></tr>`).join('')}</tbody></table></div>`;
+    else if (st.kind === 'table') html += `<p class="pv">${st.columns.map(c => `${esc(c.name)}: ${c.n}개 값`).join(' · ')} — 위 채널 데이터 표에 표시돼요.</p>`;
+    else html += `<p class="pv">${esc(st.preview || '')}${st.size > 48 ? ' …' : ''}</p>`;
+    html += '</details>';
+  });
+  box.innerHTML = shown ? html : '<p class="note">찾는 항목이 없어요.</p>';
+}
+$('raw-search').addEventListener('input', renderRaw);
+
+/* ---------- yield ---------- */
+const MESH = { 25: 500, 38: 400, 45: 325, 53: 270, 63: 230, 75: 200, 90: 170, 106: 140, 125: 120, 150: 100, 180: 80, 212: 70, 250: 60 };
+state.cuts = [53]; state.mass = null;
+try { const c = localStorage.getItem('ngb.cuts'); if (c) { $('cuts').value = c; } } catch (e) {}
+state.cuts = parseCuts($('cuts').value);
+function parseCuts(str) {
+  return [...new Set(String(str).split(/[,\s/~–-]+/).map(Number).filter(v => v > 0 && isFinite(v)))].sort((a, b) => a - b).slice(0, 6);
+}
+// cumulative % undersize at diameter d, log-interpolated between channels
+function underAt(dist, d) {
+  const { x, Q } = dist, n = x.length;
+  if (d <= x[0]) return 0;
+  if (d >= x[n - 1]) return Q[n - 1];
+  for (let i = 1; i < n; i++) if (d <= x[i]) {
+    const t = (Math.log(d) - Math.log(x[i - 1])) / (Math.log(x[i]) - Math.log(x[i - 1]));
+    return Q[i - 1] + t * (Q[i] - Q[i - 1]);
+  }
+  return Q[n - 1];
+}
+function fractions(dist, cuts) {
+  const u = [0, ...cuts.map(c => underAt(dist, c)), 100];
+  return cuts.length ? u.slice(1).map((v, i) => Math.max(0, v - u[i])) : [];
+}
+function intervalLabels(cuts) {
+  const out = []; const m = c => MESH[c] ? `${MESH[c]} mesh` : '';
+  out.push({ t: `−${cuts[0]} µm`, s: `${cuts[0]} µm 이하${m(cuts[0]) ? ' · ' + m(cuts[0]) + ' 통과' : ''}` });
+  for (let i = 1; i < cuts.length; i++) out.push({ t: `${cuts[i - 1]}–${cuts[i]} µm`, s: '구간' });
+  out.push({ t: `+${cuts.at(-1)} µm`, s: `${cuts.at(-1)} µm 초과` });
+  return out;
+}
+const kg = pct => state.mass ? (state.mass * pct / 100) : null;
+const fkg = v => v == null ? '' : v >= 100 ? v.toFixed(1) : v >= 1 ? v.toFixed(2) : v.toFixed(3);
+function renderYield() {
+  const files = state.files.filter(e => e.model.dist), t = $('yield'), big = $('ybig');
+  document.querySelectorAll('#presets .preset').forEach(b => b.setAttribute('aria-pressed', String(parseCuts(b.dataset.cuts).join() === state.cuts.join())));
+  if (!files.length || !state.cuts.length) { t.innerHTML = ''; big.innerHTML = state.cuts.length ? '' : '<p class="note">분급 기준 입경을 µm 단위 숫자로 입력해 주세요. 예: 53 또는 15, 45</p>'; return; }
+  const labs = intervalLabels(state.cuts);
+  const act = activeFile() && activeFile().model.dist ? activeFile() : files[0];
+  const fa = fractions(act.model.dist, state.cuts);
+  big.innerHTML = labs.map((l, i) => `<div class="dv"><div class="k">${esc(l.t)}${files.length > 1 ? ' · ' + esc(label(act)) : ''}</div><div class="v">${f(fa[i], 1)}<span class="u"> %</span></div>${state.mass ? `<div class="u">${fkg(kg(fa[i]))} kg</div>` : ''}</div>`).join('');
+  const rows = files.map(e => ({ e, fr: fractions(e.model.dist, state.cuts) }));
+  let html = `<thead><tr><th>시료</th>${labs.map(l => `<th><span class="yhead">${esc(l.t)}<span class="mesh">${esc(l.s)}</span></span></th>`).join('')}</tr></thead><tbody>` +
+    rows.map(r => `<tr class="${r.e.id === state.active ? 'active' : ''}"><td class="txt"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${col(r.e)}"></span>${esc(label(r.e))}</td>${r.fr.map(v => `<td>${f(v, 2)} %${state.mass ? `<span class="kg">${fkg(kg(v))} kg</span>` : ''}</td>`).join('')}</tr>`).join('') + '</tbody>';
+  if (rows.length >= 2) {
+    const st = labs.map((_, i) => { const v = rows.map(r => r.fr[i]); const m = v.reduce((a, b) => a + b, 0) / v.length; return { m, sd: Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1)) }; });
+    html += `<tfoot><tr><td class="txt">평균 (n=${rows.length})</td>${st.map(x => `<td>${f(x.m, 2)} %${state.mass ? `<span class="kg">${fkg(kg(x.m))} kg</span>` : ''}</td>`).join('')}</tr><tr><td class="txt">표준편차</td>${st.map(x => `<td>${f(x.sd, 2)} %p</td>`).join('')}</tr></tfoot>`;
+  }
+  const xs = act.model.dist.x, out = state.cuts.filter(c => c < xs[0] || c > xs.at(-1));
+  t.innerHTML = html;
+  const rn = $('yield-range'); rn.hidden = !out.length;
+  rn.textContent = out.length ? `${out.join(', ')} µm은 측정 범위(${fmtD(xs[0], true)}–${fmtD(xs.at(-1), true)} µm) 밖이라 계산값을 그대로 믿기 어려워요.` : '';
+}
+$('cuts').addEventListener('input', () => {
+  state.cuts = parseCuts($('cuts').value);
+  try { localStorage.setItem('ngb.cuts', $('cuts').value); } catch (e) {}
+  renderYield(); renderChart();
+});
+$('mass').addEventListener('input', () => { const v = parseFloat($('mass').value); state.mass = v > 0 ? v : null; renderYield(); });
+$('presets').addEventListener('click', ev => {
+  const b = ev.target.closest('.preset'); if (!b) return;
+  $('cuts').value = b.dataset.cuts; $('cuts').dispatchEvent(new Event('input'));
+});
+$('copy-yield').addEventListener('click', ev => {
+  const files = state.files.filter(e => e.model.dist); if (!files.length || !state.cuts.length) return;
+  const labs = intervalLabels(state.cuts);
+  const head = ['시료', '파일', ...labs.map(l => `${l.t} (%)`), ...(state.mass ? labs.map(l => `${l.t} (kg)`) : [])];
+  const rows = [head].concat(files.map(e => { const fr = fractions(e.model.dist, state.cuts); return [label(e), e.name, ...fr.map(v => f(v, 2)), ...(state.mass ? fr.map(v => fkg(kg(v))) : [])]; }));
+  if (state.mass) rows.unshift([`투입량 ${state.mass} kg`]);
+  copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '수율 표를 복사했어요');
+});
+
+/* ---------- utilities ---------- */
+let toastTimer;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => (t.hidden = true), 2600); }
+function copyText(text, btn, okMsg) {
+  const fallback = () => {
+    let ta = btn.parentElement.parentElement.parentElement.querySelector('textarea.copybox');
+    if (!ta) { ta = document.createElement('textarea'); ta.className = 'copybox'; ta.readOnly = true; ta.setAttribute('aria-label', '복사할 내용'); btn.closest('.panel').appendChild(ta); }
+    ta.value = text; ta.focus(); ta.select(); toast('자동 복사가 막혀 있어요. 선택된 내용을 Ctrl+C로 복사해 주세요.');
+  };
+  try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fallback); } catch (err) { fallback(); }
+}
+
+$('file-input').addEventListener('change', ev => { readFiles([...ev.target.files]); ev.target.value = ''; });
+let dragDepth = 0;
+window.addEventListener('dragenter', ev => { if ([...(ev.dataTransfer?.types || [])].includes('Files')) { dragDepth++; $('drop').hidden = false; } });
+window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('drop').hidden = true; });
+window.addEventListener('dragover', ev => ev.preventDefault());
+window.addEventListener('drop', ev => { ev.preventDefault(); dragDepth = 0; $('drop').hidden = true; if (ev.dataTransfer?.files?.length) readFiles([...ev.dataTransfer.files]); });
+
+function boot() {
+  if (typeof CFB === 'undefined') { $('warns').innerHTML = '<div class="warn">파일 해석 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하고 페이지를 새로 고쳐 주세요.</div>'; return; }
+  $('ver').textContent = 'v' + APP_VERSION;
+  if (typeof SAMPLE_B64 === 'undefined') return; // sample.js는 측정 데이터라 저장소에 없음
+  const bin = atob(SAMPLE_B64), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  addFile('260611_6 (iron).ngb', u8, true);
+}
+boot();
+let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(renderChart, 150); });
+</script>
+
+</body></html>
