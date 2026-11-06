@@ -125,6 +125,14 @@ details.st table td { text-align: left; white-space: normal; overflow-wrap: anyw
 details.st table td.t { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
 .pv { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere; padding: 0 2px 8px; }
 .note { color: var(--ink-3); font-size: 12.5px; margin: 0 0 8px; }
+.btn.danger { color: #d70015; }
+.link { font: inherit; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; }
+.link:hover { text-decoration: underline; }
+#lib td input.cell { font: inherit; font-family: var(--sans); font-size: 13px; width: 110px; padding: 3px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); }
+#lib td input.cell.wide { width: 200px; }
+#lib td input.cell:hover { border-color: var(--line); }
+#lib td input.cell:focus { border-color: var(--accent); background: var(--surface); outline: none; }
+#lib tbody tr:hover td { background: var(--bg); }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg);
   padding: 10px 18px; border-radius: 999px; font-size: 13px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-size: 12px; margin-top: 8px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
@@ -136,9 +144,11 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
     <div>
       <h1>PSA 입도 뷰어 <small id="ver"></small></h1>
       <p class="author" id="author"></p>
-      <p class="sub">HORIBA LA-960(.ngb)과 Malvern Mastersizer 2000(.mea) 입도분석 결과를 브라우저 안에서만 읽어요. 파일은 이 기기 밖으로 나가지 않습니다.</p>
+      <p class="sub">HORIBA LA-960(.ngb)과 Malvern Mastersizer 2000(.mea) 입도분석 결과를 이 PC 안에서만 읽고 정리해요. 파일은 밖으로 나가지 않습니다.</p>
     </div>
     <div class="tools">
+      <button class="btn" id="proj-open" type="button" hidden>작업 열기</button>
+      <button class="btn" id="proj-save" type="button" hidden>작업 저장</button>
       <label class="btn primary" for="file-input">파일 열기 (.ngb · .mea)</label>
       <input id="file-input" type="file" accept=".ngb,.mea" multiple hidden>
     </div>
@@ -199,6 +209,21 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
     </div>
     <div class="tbl-wrap"><table id="compare"></table></div>
     <p class="note" id="compare-note" hidden style="margin:10px 0 0">변동계수 참고 기준: ISO 13320 반복성 권장치 D50 3% 이하, D10·D90 5% 이하 (D50이 10 µm 이상일 때). 넘는 값은 “초과”로 표시돼요.</p>
+  </section>
+
+  <section class="panel" id="lib-panel" hidden>
+    <div class="panel-head">
+      <h2>데이터 목록 <span class="meta" id="lib-count" style="font-size:13px;font-weight:400"></span></h2>
+      <div class="tools">
+        <input class="search" id="lib-search" type="search" placeholder="시료·로트·메모·파일 이름으로 찾기" aria-label="데이터 목록 검색">
+        <button class="btn" id="lib-open" type="button">선택 열기</button>
+        <button class="btn" id="lib-csv" type="button">CSV 저장 (엑셀)</button>
+        <button class="btn danger" id="lib-del" type="button">선택 삭제</button>
+      </div>
+    </div>
+    <p class="note">연 파일은 원본 사본과 함께 이 목록에 자동 저장돼요. 로트·메모 칸은 눌러서 바로 고칠 수 있고, 줄을 두 번 누르면 그래프로 열려요. 수율 열은 위 “수율 계산”의 기준 입경을 따라요.</p>
+    <div class="tbl-wrap scroll" style="max-height:460px"><table id="lib"></table></div>
+    <p class="note" style="margin:10px 0 0">저장 위치: <span class="mono" id="lib-dir"></span> · <button class="link" id="lib-folder" type="button">폴더 열기</button> · <button class="link" id="lib-move" type="button">위치 변경</button></p>
   </section>
 
   <section class="panel">
@@ -485,13 +510,13 @@ function parseFile(name, u8) {
   try { return parseNGB(u8, CFB); }
   catch (err) { toast(`${name}: 열 수 없는 파일이에요. LA-960 .ngb 파일인지 확인해 주세요.`); return null; }
 }
-function addFile(name, u8, isSample, parsed) {
+function addFile(name, u8, isSample, parsed, sha) {
   const model = parsed || parseFile(name, u8);
   if (!model) return;
   const used = new Set(state.files.map(x => x.color));
   let color = COLORS.find(c => !used.has(c));
   if (!color) { toast('최대 8개 파일까지 겹쳐 볼 수 있어요. 하나를 닫고 다시 추가해 주세요.'); return; }
-  const entry = { id: Math.random().toString(36).slice(2), name, model, color, isSample };
+  const entry = { id: Math.random().toString(36).slice(2), name, model, color, isSample, sha };
   state.files.push(entry); state.active = entry.id;
   state.files.sort((a, b) => (a.model.meta.measTime || 0) - (b.model.meta.measTime || 0));
   render();
@@ -503,31 +528,40 @@ function removeFile(id) {
 }
 const activeFile = () => state.files.find(x => x.id === state.active);
 
+const recName = (file, m) => m.records > 1 ? `${file} · 기록 ${m.record}/${m.records}` : file;
 async function readFiles(list) {
-  const batch = [];
+  const batch = [], items = [];
   for (const file of list) {
     const u8 = new Uint8Array(await file.arrayBuffer());
     if (/\.ngb$/i.test(file.name)) {
       const model = parseFile(file.name, u8);
-      if (model) batch.push({ name: file.name, model });
+      if (model) { const it = { name: file.name, u8, models: [model] }; items.push(it); batch.push({ name: file.name, model, it }); }
     } else if (/\.mea$/i.test(file.name)) {
       let ms = [];
       try { ms = parseMEA(u8); } catch (err) { ms = []; }
       if (!ms.length) { toast(`${file.name}: 측정 기록을 찾지 못했어요. Mastersizer 2000 .mea 파일인지 확인해 주세요.`); continue; }
-      ms.forEach(m => batch.push({ name: ms.length > 1 ? `${file.name} · 기록 ${m.record}/${m.records}` : file.name, model: m }));
+      const it = { name: file.name, u8, models: ms }; items.push(it);
+      ms.forEach(m => batch.push({ name: recName(file.name, m), model: m, it }));
       if (ms.length > 1) toast(`${file.name}: 측정 기록 ${ms.length}건을 불러왔어요`);
     } else toast(`${file.name}: .ngb 또는 .mea 파일만 열 수 있어요.`);
   }
   if (!batch.length) return;
+  await libAdd(items); // 화면에는 8개까지만 겹쳐 보이지만 목록에는 전부 저장
+  batch.forEach(b => (b.sha = b.it.sha));
+  showBatch(batch);
+}
+function showBatch(batch) {
+  batch = batch.filter(b => !b.sha || !state.files.some(e => e.sha === b.sha && (e.model.record || 1) === (b.model.record || 1)));
+  if (!batch.length) { render(); return; }
   const room = 8 - state.files.filter(x => !x.isSample).length;
   if (batch.length > room) { toast(`한 번에 8개까지 겹쳐 볼 수 있어요. ${batch.length - room}개는 빼고 불러왔어요.`); batch.splice(room); }
   // replace the bundled sample once real files arrive; add in measurement order so colours follow time
   state.files.filter(x => x.isSample).forEach(x => removeFile(x.id));
   batch.sort((a, b) => (a.model.meta.measTime || 0) - (b.model.meta.measTime || 0));
-  batch.forEach(b => addFile(b.name, null, false, b.model));
+  batch.forEach(b => addFile(b.name, null, false, b.model, b.sha));
 }
 
-function render() { renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderDist(); renderRaw(); }
+function render() { renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderLib(); renderDist(); renderRaw(); }
 
 function renderRail() {
   const r = $('rail');
@@ -833,7 +867,7 @@ function renderYield() {
 $('cuts').addEventListener('input', () => {
   state.cuts = parseCuts($('cuts').value);
   try { localStorage.setItem('ngb.cuts', $('cuts').value); } catch (e) {}
-  renderYield(); renderChart();
+  renderYield(); renderChart(); renderLib();
 });
 $('mass').addEventListener('input', () => { const v = parseFloat($('mass').value); state.mass = v > 0 ? v : null; renderYield(); });
 $('presets').addEventListener('click', ev => {
@@ -868,16 +902,148 @@ window.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth -
 window.addEventListener('dragover', ev => ev.preventDefault());
 window.addEventListener('drop', ev => { ev.preventDefault(); dragDepth = 0; $('drop').hidden = true; if (ev.dataTransfer?.files?.length) readFiles([...ev.dataTransfer.files]); });
 
+/* ---------- 저장: 데이터 목록 · 작업 저장 (exe 창에서만, 브라우저에서는 숨김) ---------- */
+const lib = { on: false, rows: [], q: '', sel: new Set() };
+const api = () => window.pywebview.api;
+function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
+function unb64(s) { const bin = atob(s), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; }
+function toRecord(sha, file, m) {
+  const r = m.results, d = m.dist;
+  return { key: `${sha}:${m.record || 1}`, sha, record: m.record || 1, name: recName(file, m), sample: m.meta.sample,
+    measTime: m.meta.measTime ? m.meta.measTime.getTime() : null,
+    instrument: m.kind === 'mea' ? 'Mastersizer 2000' : (m.meta.model || 'LA-960'),
+    D10: r.D10, D50: r.D50, D90: r.D90, Span: r.Span,
+    dist: d ? { x: Array.from(d.x), Q: Array.from(d.Q) } : null, lot: '', memo: '', added: Date.now() };
+}
+async function libSave() {
+  try { await api().lib_save(JSON.stringify(lib.rows)); return true; }
+  catch (e) { toast('데이터 목록을 저장하지 못했어요: ' + (e.message || e)); return false; }
+}
+async function libAdd(items) {
+  if (!lib.on) return;
+  let n = 0;
+  try {
+    for (const it of items) {
+      it.sha = await api().save_original(it.name, b64(it.u8));
+      for (const m of it.models) {
+        const rec = toRecord(it.sha, it.name, m);
+        if (!lib.rows.some(x => x.key === rec.key)) { lib.rows.push(rec); n++; }
+      }
+    }
+  } catch (e) { toast('원본을 저장하지 못했어요: ' + (e.message || e)); }
+  if (n && await libSave()) toast(`데이터 목록에 ${n}건 저장했어요`);
+}
+function libFiltered() {
+  const q = lib.q.trim().toLowerCase();
+  return lib.rows.filter(r => !q || [r.sample, r.lot, r.memo, r.name, r.instrument].join(' ').toLowerCase().includes(q))
+    .sort((a, b) => (b.measTime || 0) - (a.measTime || 0));
+}
+const libYields = r => !state.cuts.length ? [] : r.dist ? fractions(r.dist, state.cuts) : intervalLabels(state.cuts).map(() => null);
+function renderLib() {
+  if (!lib.on) return;
+  const rows = libFiltered(), labs = state.cuts.length ? intervalLabels(state.cuts) : [];
+  $('lib-count').textContent = `${rows.length === lib.rows.length ? '' : rows.length + ' / '}${lib.rows.length}건${lib.sel.size ? ` · ${lib.sel.size}건 선택` : ''}`;
+  if (!lib.rows.length) { $('lib').innerHTML = '<tbody><tr><td class="txt" style="text-align:left;color:var(--ink-3)">아직 저장된 데이터가 없어요. .ngb · .mea 파일을 열면 여기에 쌓여요.</td></tr></tbody>'; return; }
+  const all = rows.length > 0 && rows.every(r => lib.sel.has(r.key));
+  $('lib').innerHTML = `<thead><tr><th class="l"><input type="checkbox" id="lib-all" ${all ? 'checked' : ''} aria-label="보이는 항목 모두 선택"></th><th class="l">측정 일시</th><th class="l">시료</th><th class="l">로트</th><th class="l">메모</th><th>D10</th><th>D50</th><th>D90</th><th>Span</th>${labs.map(l => `<th>${esc(l.t)} (%)</th>`).join('')}<th class="l">장비</th><th class="l">파일</th></tr></thead><tbody>` +
+    rows.map(r => `<tr data-key="${esc(r.key)}"><td class="txt"><input type="checkbox" data-sel ${lib.sel.has(r.key) ? 'checked' : ''} aria-label="${esc(r.sample)} 선택"></td><td>${fmtTime(r.measTime ? new Date(r.measTime) : null)}</td><td class="txt">${esc(r.sample)}</td><td class="txt"><input class="cell" data-f="lot" value="${esc(r.lot || '')}" aria-label="로트" placeholder="—"></td><td class="txt"><input class="cell wide" data-f="memo" value="${esc(r.memo || '')}" aria-label="메모" placeholder="—"></td><td>${f(r.D10)}</td><td>${f(r.D50)}</td><td>${f(r.D90)}</td><td>${f(r.Span)}</td>${libYields(r).map(v => `<td>${f(v, 2)}</td>`).join('')}<td class="txt">${esc(r.instrument)}</td><td class="txt fn" title="${esc(r.name)}">${esc(r.name)}</td></tr>`).join('') + '</tbody>';
+}
+async function openRecords(refs, replace) {
+  const batch = [], cache = {};
+  for (const ref of refs) {
+    if (!(ref.sha in cache)) { try { const s = await api().read_original(ref.sha); cache[ref.sha] = s ? unb64(s) : null; } catch (e) { cache[ref.sha] = null; } }
+    const u8 = cache[ref.sha];
+    if (!u8) { toast(`${ref.name}: 원본 사본을 찾지 못했어요`); continue; }
+    let model = null;
+    try { model = /\.mea\b/i.test(ref.name) ? parseMEA(u8).find(m => m.record === ref.record) : parseNGB(u8, CFB); } catch (e) {}
+    if (model) batch.push({ name: ref.name, model, sha: ref.sha }); else toast(`${ref.name}: 원본을 해석하지 못했어요`);
+  }
+  if (replace) state.files = [];
+  batch.sort((a, b) => (a.model.meta.measTime || 0) - (b.model.meta.measTime || 0));
+  showBatch(batch);
+}
+$('lib-search').addEventListener('input', ev => { lib.q = ev.target.value; renderLib(); });
+$('lib').addEventListener('change', async ev => {
+  if (ev.target.id === 'lib-all') { libFiltered().forEach(r => ev.target.checked ? lib.sel.add(r.key) : lib.sel.delete(r.key)); renderLib(); return; }
+  const tr = ev.target.closest('tr[data-key]'); if (!tr) return;
+  const r = lib.rows.find(x => x.key === tr.dataset.key); if (!r) return;
+  if (ev.target.matches('[data-sel]')) { ev.target.checked ? lib.sel.add(r.key) : lib.sel.delete(r.key); renderLib(); return; }
+  if (ev.target.dataset.f) { r[ev.target.dataset.f] = ev.target.value.trim(); if (await libSave()) toast('저장했어요'); }
+});
+$('lib').addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches('input.cell')) ev.target.blur(); });
+$('lib').addEventListener('dblclick', ev => {
+  if (ev.target.matches('input')) return;
+  const tr = ev.target.closest('tr[data-key]'); const r = tr && lib.rows.find(x => x.key === tr.dataset.key);
+  if (r) openRecords([r]);
+});
+$('lib-open').addEventListener('click', () => {
+  const rows = libFiltered().filter(r => lib.sel.has(r.key));
+  if (!rows.length) return toast('열 항목을 먼저 선택해 주세요');
+  if (rows.length > 8) toast('한 번에 8개까지 겹쳐 볼 수 있어요. 앞의 8개만 열어요.');
+  openRecords(rows.slice(0, 8), true);
+});
+$('lib-del').addEventListener('click', async () => {
+  const gone = lib.rows.filter(r => lib.sel.has(r.key));
+  if (!gone.length) return toast('삭제할 항목을 먼저 선택해 주세요');
+  if (!confirm(`선택한 ${gone.length}건을 데이터 목록에서 지울까요?\n보관한 원본 사본도 함께 지워지고 되돌릴 수 없어요.`)) return;
+  lib.rows = lib.rows.filter(r => !lib.sel.has(r.key)); lib.sel.clear();
+  if (!(await libSave())) return;
+  const shas = [...new Set(gone.map(r => r.sha))].filter(s => !lib.rows.some(r => r.sha === s));
+  if (shas.length) await api().delete_originals(shas);
+  renderLib(); toast(`${gone.length}건 지웠어요`);
+});
+$('lib-csv').addEventListener('click', async () => {
+  const rows = libFiltered(); if (!rows.length) return toast('내보낼 데이터가 없어요');
+  const labs = state.cuts.length ? intervalLabels(state.cuts) : [];
+  const q = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const out = [['측정 일시', '시료', '로트', '메모', 'D10 (µm)', 'D50 (µm)', 'D90 (µm)', 'Span', ...labs.map(l => `${l.t} (%)`), '장비', '파일']]
+    .concat(rows.map(r => [fmtTime(r.measTime ? new Date(r.measTime) : null), r.sample, r.lot, r.memo, f(r.D10), f(r.D50), f(r.D90), f(r.Span), ...libYields(r).map(v => f(v, 2)), r.instrument, r.name]));
+  try { const n = await api().save_text('PSA_데이터목록.csv', out.map(r => r.map(q).join(',')).join('\r\n')); if (n) toast(`${n} 저장했어요`); }
+  catch (e) { toast('CSV를 저장하지 못했어요: ' + (e.message || e)); }
+});
+$('lib-folder').addEventListener('click', () => api().open_folder());
+$('lib-move').addEventListener('click', async () => {
+  if (!confirm('저장 위치를 바꿀까요?\n고른 폴더 안에 PSA_Data 폴더를 만들고 지금 데이터를 복사해요. 지금 폴더는 그대로 남아요.')) return;
+  try { const d = await api().change_dir(); if (d) { $('lib-dir').textContent = d; toast('저장 위치를 바꿨어요'); } }
+  catch (e) { toast('저장 위치를 바꾸지 못했어요: ' + (e.message || e)); }
+});
+$('proj-save').addEventListener('click', async () => {
+  const files = state.files.filter(e => e.sha);
+  if (!files.length) return toast('저장할 파일이 없어요. 측정 파일을 먼저 열어 주세요 (예시 파일은 저장되지 않아요).');
+  const proj = { app: 'PSA_Viewer', version: APP_VERSION, saved: new Date().toISOString(), cuts: $('cuts').value, mass: state.mass,
+    files: files.map(e => ({ sha: e.sha, record: e.model.record || 1, name: e.name })) };
+  const day = new Date(), nm = `${day.getFullYear()}${pad2(day.getMonth() + 1)}${pad2(day.getDate())}_${files[0].model.meta.sample}`.replace(/[\\/:*?"<>|]/g, '_');
+  try { const n = await api().project_save(JSON.stringify(proj, null, 1), nm + '.psa'); if (n) toast(`${n} 저장했어요`); }
+  catch (e) { toast('작업을 저장하지 못했어요: ' + (e.message || e)); }
+});
+$('proj-open').addEventListener('click', async () => {
+  let proj;
+  try { const s = await api().project_open(); if (!s) return; proj = JSON.parse(s); } catch (e) { return toast('작업 파일을 열지 못했어요'); }
+  if (!proj || !Array.isArray(proj.files)) return toast('PSA 작업 파일이 아니에요');
+  if (proj.cuts != null) { $('cuts').value = proj.cuts; state.cuts = parseCuts(proj.cuts); }
+  $('mass').value = proj.mass || ''; state.mass = proj.mass > 0 ? proj.mass : null;
+  await openRecords(proj.files, true);
+});
+async function libInit() {
+  if (lib.on || !(window.pywebview && window.pywebview.api && window.pywebview.api.lib_load)) return;
+  try { lib.rows = JSON.parse(await api().lib_load()); if (!Array.isArray(lib.rows)) throw 0; }
+  catch (e) { $('warns').innerHTML = '<div class="warn">데이터 목록(library.json)을 읽지 못해 저장 기능을 껐어요. 저장 폴더의 library.json.bak으로 복구할 수 있어요.</div>'; return; }
+  lib.on = true; // 읽기에 성공했을 때만 켠다 — 실패한 채 저장하면 기존 목록을 빈 목록으로 덮어쓰게 됨
+  $('lib-panel').hidden = $('proj-open').hidden = $('proj-save').hidden = false;
+  try { $('lib-dir').textContent = (await api().info()).data_dir; } catch (e) {}
+  renderLib();
+}
+window.addEventListener('pywebviewready', libInit);
+
 function boot() {
   if (typeof CFB === 'undefined') { $('warns').innerHTML = '<div class="warn">파일 해석 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하고 페이지를 새로 고쳐 주세요.</div>'; return; }
   $('ver').textContent = 'v' + APP_VERSION;
   $('author').textContent = 'Developed by ' + APP_AUTHOR;
-  if (typeof SAMPLE_B64 === 'undefined') return; // sample.js는 측정 데이터라 저장소에 없음
-  const bin = atob(SAMPLE_B64), u8 = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  addFile('260611_6 (iron).ngb', u8, true);
+  if (typeof SAMPLE_B64 === 'undefined') { render(); return; } // sample.js는 측정 데이터라 저장소에 없음 → 빈 화면 안내
+  addFile('260611_6 (iron).ngb', unb64(SAMPLE_B64), true);
 }
 boot();
+libInit();
 let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(renderChart, 150); });
 </script>
 

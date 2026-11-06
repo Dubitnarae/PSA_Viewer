@@ -5,6 +5,7 @@ from pathlib import Path
 import webview
 
 import updater
+from storage import Api
 from version import APP_NAME, __version__
 
 
@@ -33,6 +34,8 @@ def check_update(window):
 
 # PyInstaller 실행 시 리소스는 sys._MEIPASS 아래에 풀린다
 base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+api = Api()
 win = webview.create_window(f"{APP_NAME} v{__version__}", str(base / "index.html"),
-                            width=1400, height=950)
+                            width=1400, height=950, js_api=api)
+api._window = win
 webview.start(check_update, win)
