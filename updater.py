@@ -6,6 +6,7 @@ GitHub 최신 릴리스에서 PSA_Viewer.exe와 PSA_Viewer.exe.sha256을 받아 
 """
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
@@ -60,7 +61,10 @@ def install(exe_url: str, sha_url: str) -> None:
     except OSError:
         old.rename(cur)  # 되돌리기
         raise
-    subprocess.Popen([str(cur)], cwd=str(cur.parent), close_fds=True)
+    # 새 exe가 지금 exe의 임시 폴더(_MEI…) 설정을 물려받지 않게 한다. 안 하면 지금 exe가 끝날 때
+    # 그 폴더를 못 지워 "Failed to remove temporary directory" 경고가 뜬다 (PyInstaller 6.9+)
+    env = dict(os.environ, PYINSTALLER_RESET_ENVIRONMENT="1")
+    subprocess.Popen([str(cur)], cwd=str(cur.parent), close_fds=True, env=env)
 
 
 def cleanup() -> None:
