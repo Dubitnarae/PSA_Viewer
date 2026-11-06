@@ -16,6 +16,8 @@ PSA 입도 뷰어의 버전별 변경 내용을 기록합니다.
 ### 추가
 - (다음 버전에 들어갈 내용을 여기에 먼저 적고, 릴리스할 때 버전 번호를 붙임)
 - 데스크톱 프로그램(`PSA_Viewer.exe`) 빌드 추가: `app.py`(pywebview) + `build.ps1`(PyInstaller)
+- 자동 업데이트: 시작할 때 GitHub 최신 릴리스를 확인하고, 동의하면 SHA256 확인 후 exe 교체·재시작 (`updater.py`, 게시는 `publish.ps1`)
+- 개발자 표기: KIM YEONGDO (화면 상단, `version.py`의 `AUTHOR`)
 
 ### 변경
 - 디자인을 Apple 스타일로 변경: 시스템 글꼴, 그림자 카드, 알약 버튼(주 동작 파란 채움 / 보조 동작 회색 채움)
