@@ -128,6 +128,9 @@ details.st table td.t { color: var(--ink-3); font-size: 11.5px; white-space: now
 .btn.danger { color: #d70015; }
 .link { font: inherit; border: 0; background: none; color: var(--accent); cursor: pointer; padding: 0; }
 .link:hover { text-decoration: underline; }
+.panel h3 { font-size: 15px; font-weight: 600; margin: 20px 0 6px; }
+#mix-src td input.cell { font: inherit; font-family: var(--mono); font-size: 13px; width: 90px; text-align: right; padding: 3px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+#mix-src td input.cell:focus { border-color: var(--accent); outline: none; }
 #lib td input.cell { font: inherit; font-family: var(--sans); font-size: 13px; width: 110px; padding: 3px 8px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--ink); }
 #lib td input.cell.wide { width: 200px; }
 #lib td input.cell:hover { border-color: var(--line); }
@@ -200,6 +203,33 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
     <div class="ybig" id="ybig"></div>
     <div class="tbl-wrap"><table id="yield"></table></div>
     <p class="note" id="yield-note" style="margin:10px 0 0">누적분포를 측정 채널 사이에서 로그 보간해 계산해요(D10·D50·D90을 구하는 방식과 같음). 레이저 회절 결과라 체 분급 수율과는 입자 형상 때문에 차이가 날 수 있고, 무게 환산은 분포가 부피 기준이면서 입자 밀도가 같다고 가정한 값이에요.</p>
+  </section>
+
+  <section class="panel" id="mix-panel">
+    <div class="panel-head">
+      <h2>혼합 예측</h2>
+      <span class="meta">열어 둔 분말의 누적분포를 혼합비대로 더해 혼합품 분포를 계산해요</span>
+    </div>
+    <p class="note" id="mix-empty">혼합할 분말의 측정 파일을 2개 이상 열면 쓸 수 있어요. 데이터 목록에서 골라 열어도 돼요.</p>
+    <div id="mix-body" hidden>
+      <div class="tbl-wrap"><table id="mix-src"></table></div>
+      <p class="note" id="mix-sum" style="margin:10px 0 0"></p>
+      <h3>목표로 혼합비 찾기</h3>
+      <p class="note">맞추고 싶은 값만 넣으세요(빈칸은 무시). 구간 목표는 위 “수율 계산”의 기준 입경을 따라요. 재고 칸에 0을 넣은 분말은 후보에서 빠지고, 재고 상한은 만들 양을 넣어야 적용돼요.</p>
+      <div class="ctrl">
+        <div class="field"><label for="mix-t10">목표 D10 (µm)</label><input id="mix-t10" class="sm" type="number" min="0" step="any"></div>
+        <div class="field"><label for="mix-t50">목표 D50 (µm)</label><input id="mix-t50" class="sm" type="number" min="0" step="any"></div>
+        <div class="field"><label for="mix-t90">목표 D90 (µm)</label><input id="mix-t90" class="sm" type="number" min="0" step="any"></div>
+        <div id="mix-fr" style="display:contents"></div>
+        <div class="field"><label for="mix-total">만들 양 (kg, 선택)</label><input id="mix-total" class="sm" type="number" min="0" step="any"></div>
+        <button class="btn primary" id="mix-run" type="button">최적 혼합비 찾기</button>
+      </div>
+      <div id="mix-opt"></div>
+      <h3>실측 혼합품과 비교</h3>
+      <div class="ctrl"><div class="field"><label for="mix-meas">실측 파일 (먼저 열어 두세요)</label><select id="mix-meas" class="search" style="width:280px"></select></div></div>
+      <div id="mix-cmp"></div>
+      <p class="note" style="margin:10px 0 0">계산 방식: 부피 기준 누적분포를 부피 분율로 더함(Q<sub>혼합</sub> = Σ 부피분율 × Q<sub>분말</sub>). 혼합비는 무게 기준이고, 밀도를 모든 분말에 넣으면 부피 분율로 바꿔 계산해요(하나라도 비면 밀도가 같다고 봄). 혼합 중 응집·분쇄는 반영하지 않아요.</p>
+    </div>
   </section>
 
   <section class="panel" id="compare-panel">
@@ -522,6 +552,7 @@ function addFile(name, u8, isSample, parsed, sha) {
   render();
 }
 function removeFile(id) {
+  if (id === 'mix') mix.w = {}; // 예측 칩을 닫으면 혼합비도 비움 (안 비우면 render에서 다시 생김)
   state.files = state.files.filter(x => x.id !== id);
   if (state.active === id) state.active = state.files.length ? state.files[state.files.length - 1].id : null;
   render();
@@ -553,7 +584,7 @@ async function readFiles(list) {
 function showBatch(batch) {
   batch = batch.filter(b => !b.sha || !state.files.some(e => e.sha === b.sha && (e.model.record || 1) === (b.model.record || 1)));
   if (!batch.length) { render(); return; }
-  const room = 8 - state.files.filter(x => !x.isSample).length;
+  const room = 8 - state.files.filter(x => !x.isSample && x.model.kind !== 'mix').length;
   if (batch.length > room) { toast(`한 번에 8개까지 겹쳐 볼 수 있어요. ${batch.length - room}개는 빼고 불러왔어요.`); batch.splice(room); }
   // replace the bundled sample once real files arrive; add in measurement order so colours follow time
   state.files.filter(x => x.isSample).forEach(x => removeFile(x.id));
@@ -561,7 +592,7 @@ function showBatch(batch) {
   batch.forEach(b => addFile(b.name, null, false, b.model, b.sha));
 }
 
-function render() { renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderLib(); renderDist(); renderRaw(); }
+function render() { syncMix(); renderMix(); renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderLib(); renderDist(); renderRaw(); }
 
 function renderRail() {
   const r = $('rail');
@@ -569,7 +600,7 @@ function renderRail() {
   r.innerHTML = state.files.map(e => `
     <span class="chip" role="button" tabindex="0" aria-pressed="${e.id === state.active}" data-id="${e.id}" title="${esc(e.name)}">
       <span class="sw" style="background:${col(e)}"></span><span class="nm">${esc(label(e))}</span>
-      ${e.isSample ? '<span class="tag">예시 파일</span>' : ''}
+      ${e.isSample ? '<span class="tag">예시 파일</span>' : ''}${e.model.kind === 'mix' ? '<span class="tag">예측</span>' : ''}
       <button class="x" type="button" aria-label="${esc(e.name)} 닫기" data-close="${e.id}">×</button>
     </span>`).join('') + '<span class="hint">파일을 더 끌어다 놓으면 겹쳐서 비교돼요</span>';
 }
@@ -623,7 +654,7 @@ function renderChart() {
   const act = activeFile();
   const order = [...files.filter(e => e !== act), ...files.filter(e => e === act)];
   order.forEach(e => {
-    const { x, q, Q } = e.model.dist, c = col(e), isAct = e === act;
+    const { x, q, Q } = e.model.dist, c = col(e), isAct = e === act, dash = e.model.kind === 'mix' ? ' stroke-dasharray="6 4"' : '';
     if (files.length === 1) {
       for (let i = 1; i < x.length; i++) if (q[i] > 0) {
         const x0 = X(x[i - 1]) + 1, x1 = X(x[i]) - 1;
@@ -632,9 +663,9 @@ function renderChart() {
     } else {
       let d = `M${X(x[0])} ${Y1(0)}`;
       for (let i = 1; i < x.length; i++) d += `H${X(x[i - 1]).toFixed(1)}V${Y1(q[i]).toFixed(1)}H${X(x[i]).toFixed(1)}`;
-      s += `<path d="${d}" fill="${c}" fill-opacity="${isAct ? .16 : .06}" stroke="${c}" stroke-width="${isAct ? 2 : 1.5}" stroke-linejoin="round"/>`;
+      s += `<path d="${d}" fill="${c}" fill-opacity="${isAct ? .16 : .06}" stroke="${c}" stroke-width="${isAct ? 2 : 1.5}" stroke-linejoin="round"${dash}/>`;
     }
-    s += `<polyline points="${x.map((d, i) => `${X(d).toFixed(1)},${Y2(Q[i]).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="${isAct ? 2.25 : 1.5}" stroke-linejoin="round"/>`;
+    s += `<polyline points="${x.map((d, i) => `${X(d).toFixed(1)},${Y2(Q[i]).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="${isAct ? 2.25 : 1.5}" stroke-linejoin="round"${dash}/>`;
   });
   s += '</g>';
   // D markers for active file
@@ -657,7 +688,7 @@ function renderChart() {
   });
   s += `<line id="cross" x1="0" x2="0" y1="${PT1}" y2="${PT2 + PH2}" stroke="var(--ink-2)" stroke-width="1" visibility="hidden"/>`;
   s += `<rect id="hit" x="${ML}" y="${PT1}" width="${W - ML - MR}" height="${PT2 + PH2 - PT1}" fill="transparent"/>`;
-  const mixed = new Set(files.map(e => e.model.kind || 'ngb')).size > 1;
+  const mixed = new Set(files.filter(e => e.model.kind !== 'mix').map(e => e.model.kind || 'ngb')).size > 1;
   s += '</svg><div class="tip" id="tip" hidden></div>';
   if (mixed) s += '<p class="note" style="margin:8px 0 0">LA-960과 Mastersizer는 측정 채널 폭이 달라 빈도(q) 높이를 직접 비교하기 어려워요. 누적(Q) 곡선과 D값으로 비교해 주세요. 측정 방식(건식/습식)도 다를 수 있어요.</p>';
   box.innerHTML = s;
@@ -694,6 +725,14 @@ function renderReadout() {
   const e = activeFile(), r = $('readout');
   if (!e) { r.innerHTML = '<p class="note">파일을 열면 측정 결과가 여기에 표시돼요.</p>'; return; }
   const m = e.model.meta, v = e.model.results;
+  if (e.model.kind === 'mix') {
+    r.innerHTML = `<div class="sample"><span class="sw" style="background:${col(e)}"></span>${esc(m.sample)}</div>
+      <div class="when">측정값이 아니라 혼합비로 계산한 예측값이에요</div>
+      <div class="dvals">${['D10', 'D50', 'D90'].map(k => `<div class="dv"><div class="k">${k}</div><div class="v">${f(v[k])}</div><div class="u">µm</div></div>`).join('')}</div>
+      <dl class="kv"><dt>Span</dt><dd>${f(v.Span, 3)}</dd>${e.model.comp.map(c => `<dt>${esc(c.name)}</dt><dd>${f(c.w * 100, 1)} %</dd>`).join('')}</dl>
+      <div class="check">무게 혼합비 기준 · ${e.model.useRho ? '밀도로 부피 분율 환산' : '밀도가 같다고 가정'}</div>`;
+    return;
+  }
   const diff = e.model.d50calc && v.D50 ? Math.abs(e.model.d50calc / v.D50 - 1) * 100 : null;
   r.innerHTML = `
     <div class="sample"><span class="sw" style="background:${col(e)}"></span>${esc(m.sample)}</div>
@@ -867,7 +906,7 @@ function renderYield() {
 $('cuts').addEventListener('input', () => {
   state.cuts = parseCuts($('cuts').value);
   try { localStorage.setItem('ngb.cuts', $('cuts').value); } catch (e) {}
-  renderYield(); renderChart(); renderLib();
+  renderYield(); renderChart(); renderLib(); renderMix();
 });
 $('mass').addEventListener('input', () => { const v = parseFloat($('mass').value); state.mass = v > 0 ? v : null; renderYield(); });
 $('presets').addEventListener('click', ev => {
@@ -881,6 +920,150 @@ $('copy-yield').addEventListener('click', ev => {
   const rows = [head].concat(files.map(e => { const fr = fractions(e.model.dist, state.cuts); return [label(e), e.name, ...fr.map(v => f(v, 2)), ...(state.mass ? fr.map(v => fkg(kg(v))) : [])]; }));
   if (state.mass) rows.unshift([`투입량 ${state.mass} kg`]);
   copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '수율 표를 복사했어요');
+});
+
+/* ---------- mix prediction ---------- */
+// 부피 기준 누적분포는 부피 분율로 그대로 더해진다: Q_mix(d) = Σ v_k · Q_k(d)
+function unionGrid(dists) {
+  const xs = dists.flatMap(d => Array.from(d.x)).sort((a, b) => a - b), g = [];
+  xs.forEach(v => { if (!g.length || v / g[g.length - 1] - 1 > 1e-3) g.push(v); });
+  return g;
+}
+function qOnGrid(dist, grid) { const end = dist.Q[dist.Q.length - 1] || 100; return grid.map(d => underAt(dist, d) * 100 / end); }
+function mixQ(Qs, v) { return Qs[0].map((_, j) => Qs.reduce((a, Q, k) => a + v[k] * Q[j], 0)); }
+function toDist(x, Q) { return { x, Q, q: Q.map((v, i) => i ? Math.max(0, v - Q[i - 1]) : v) }; }
+// 누적 p %가 되는 입경 (채널 사이 로그 보간)
+function dAt(dist, p) {
+  const { x, Q } = dist;
+  if (Q[0] >= p) return x[0];
+  for (let i = 1; i < x.length; i++) if (Q[i] >= p) {
+    const t = (p - Q[i - 1]) / (Q[i] - Q[i - 1]);
+    return Math.exp(Math.log(x[i - 1]) + t * (Math.log(x[i]) - Math.log(x[i - 1])));
+  }
+  return null;
+}
+function dRes(dist) { const D10 = dAt(dist, 10), D50 = dAt(dist, 50), D90 = dAt(dist, 90); return { D10, D50, D90, Span: D10 != null && D50 && D90 != null ? (D90 - D10) / D50 : null }; }
+// 무게비 → 부피비. 밀도를 모두 알 때만 환산하고, 하나라도 모르면 밀도가 같다고 본다
+function volFrac(w, rho) { const ok = rho.every(r => r > 0), v = w.map((x, k) => ok ? x / rho[k] : x), s = v.reduce((a, b) => a + b, 0); return v.map(x => x / s); }
+// 합 1, 0 ≤ w_k ≤ caps_k 안에서 obj 최소화: 두 분말 사이로 비율을 옮겨 보며 좋아지면 받아들이고, 안 좋아지면 옮기는 양을 반으로 줄임. 시작점을 여러 개 써서 국소해를 피함
+function optimizeMix(caps, obj) {
+  const n = caps.length, starts = [];
+  for (let s = -1; s < n; s++) {
+    const w = s < 0 ? caps.map(c => Math.min(c, 1 / n)) : caps.map(() => 0);
+    let rest = 1 - w.reduce((a, b) => a + b, 0);
+    for (const k of s < 0 ? caps.keys() : [s, ...caps.keys()]) { const add = Math.min(caps[k] - w[k], rest); w[k] += add; rest -= add; }
+    if (rest < 1e-9) starts.push(w);
+  }
+  let best = null;
+  for (const w of starts) {
+    let v = obj(w);
+    for (let step = 0.25; step > 2e-4; step /= 2) {
+      let moved = true;
+      while (moved) {
+        moved = false;
+        for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+          const d = i === j ? 0 : Math.min(step, w[i], caps[j] - w[j]);
+          if (d <= 1e-9) continue;
+          w[i] -= d; w[j] += d;
+          const nv = obj(w);
+          if (nv < v - 1e-12) { v = nv; moved = true; } else { w[i] += d; w[j] -= d; }
+        }
+      }
+    }
+    if (!best || v < best.v) best = { w: w.slice(), v };
+  }
+  return best;
+}
+
+const mix = { w: {}, rho: {}, stock: {}, tfr: {}, meas: '', opt: null };
+const mixSrc = () => state.files.filter(e => e.model.dist && e.model.kind !== 'mix');
+const numIn = v => { const n = parseFloat(v); return isFinite(n) && n >= 0 ? n : null; };
+function syncMix() {
+  const parts = mixSrc().filter(e => mix.w[e.id] > 0), i = state.files.findIndex(e => e.model.kind === 'mix');
+  if (!parts.length) {
+    if (i >= 0) { state.files.splice(i, 1); if (state.active === 'mix') state.active = state.files.length ? state.files[state.files.length - 1].id : null; }
+    return;
+  }
+  const sum = parts.reduce((a, e) => a + mix.w[e.id], 0), w = parts.map(e => mix.w[e.id] / sum), rho = parts.map(e => mix.rho[e.id]);
+  const grid = unionGrid(parts.map(e => e.model.dist));
+  const dist = toDist(grid, mixQ(parts.map(e => qOnGrid(e.model.dist, grid)), volFrac(w, rho)));
+  const model = { kind: 'mix', meta: { sample: '예측 혼합', measTime: null }, results: dRes(dist), dist, d50calc: null, warnings: [], streams: [],
+    comp: parts.map((e, k) => ({ name: label(e), w: w[k] })), sum, useRho: rho.every(r => r > 0), someRho: rho.some(r => r > 0) };
+  if (i >= 0) state.files[i].model = model;
+  else state.files.push({ id: 'mix', name: '예측 혼합 (계산값)', model, color: '--ink', isSample: false });
+}
+// 입력 중에는 이 패널을 다시 그리지 않음 (다시 그리면 입력 칸 포커스가 사라짐)
+function refreshMix() { syncMix(); renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderDist(); renderMixOut(); }
+function renderMix() {
+  const src = mixSrc();
+  $('mix-empty').hidden = src.length >= 2; $('mix-body').hidden = src.length < 2;
+  if (src.length < 2) return;
+  const cell = (e, k, what) => `<td><input class="cell" data-f="${k}" type="number" min="0" step="any" value="${mix[k][e.id] ?? ''}" aria-label="${esc(label(e))} ${what}"></td>`;
+  $('mix-src').innerHTML = `<thead><tr><th class="l">분말</th><th>D10</th><th>D50</th><th>D90</th><th>혼합비 (무게 %)</th><th>밀도 (g/cm³, 선택)</th><th>재고 (kg, 선택)</th></tr></thead><tbody>` +
+    src.map(e => `<tr data-id="${e.id}"><td class="txt"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${col(e)}"></span>${esc(label(e))}</td><td>${f(e.model.results.D10)}</td><td>${f(e.model.results.D50)}</td><td>${f(e.model.results.D90)}</td>${cell(e, 'w', '혼합비')}${cell(e, 'rho', '밀도')}${cell(e, 'stock', '재고')}</tr>`).join('') + '</tbody>';
+  $('mix-fr').innerHTML = (state.cuts.length ? intervalLabels(state.cuts) : []).map(l => `<div class="field"><label>${esc(l.t)} 목표 (%)</label><input class="sm" data-t="${esc(l.t)}" type="number" min="0" max="100" step="any" value="${mix.tfr[l.t] ?? ''}"></div>`).join('');
+  if (!src.some(e => e.id === mix.meas)) mix.meas = '';
+  $('mix-meas').innerHTML = '<option value="">(고르지 않음)</option>' + src.map(e => `<option value="${e.id}"${e.id === mix.meas ? ' selected' : ''}>${esc(label(e))}</option>`).join('');
+  renderMixOut();
+}
+function renderMixOut() {
+  const me = state.files.find(e => e.model.kind === 'mix'), m = me && me.model;
+  $('mix-sum').innerHTML = !m ? '혼합비(%)를 넣으면 그래프에 <b>점선</b>으로 예측 곡선이 그려지고, 수율·결과 비교 표에도 “예측 혼합” 줄이 생겨요.' :
+    `합계 ${+m.sum.toFixed(2)}%${Math.abs(m.sum - 100) > 0.01 ? ' (100%가 아니라서 비율대로 나눠 계산해요)' : ''} · 예측 D10 <b>${f(m.results.D10)}</b> · D50 <b>${f(m.results.D50)}</b> · D90 <b>${f(m.results.D90)}</b> µm · Span ${f(m.results.Span, 3)}` +
+    (m.someRho && !m.useRho ? ' · 밀도를 일부만 넣어서 밀도가 같다고 보고 계산했어요' : '');
+  const meas = mixSrc().find(e => e.id === mix.meas), box = $('mix-cmp');
+  if (!meas) { box.innerHTML = ''; return; }
+  if (!m) { box.innerHTML = '<p class="note">예측 곡선이 없어요. 위 표에 혼합비를 먼저 넣어 주세요.</p>'; return; }
+  const b = meas.model.dist, end = b.Q[b.Q.length - 1] || 100, rb = dRes({ x: b.x, Q: b.Q.map(v => v * 100 / end) });
+  let dq = 0, at = null;
+  unionGrid([m.dist, b]).forEach(d => { const v = Math.abs(underAt(m.dist, d) - underAt(b, d) * 100 / end); if (v > dq) { dq = v; at = d; } });
+  const fa = fractions(m.dist, state.cuts), fb = fractions(b, state.cuts).map(v => v * 100 / end);
+  const rows = [['D10 (µm)', m.results.D10, rb.D10, 1], ['D50 (µm)', m.results.D50, rb.D50, 1], ['D90 (µm)', m.results.D90, rb.D90, 1], ['Span', m.results.Span, rb.Span, 1],
+    ...(state.cuts.length ? intervalLabels(state.cuts) : []).map((l, i) => [`${l.t} (%)`, fa[i], fb[i], 0])];
+  box.innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>항목</th><th>예측</th><th>실측</th><th>차이</th></tr></thead><tbody>` +
+    rows.map(([k, p, q, rel]) => `<tr><td class="txt">${k}</td><td>${f(p, rel ? 2 : 1)}</td><td>${f(q, rel ? 2 : 1)}</td><td>${p == null || q == null ? '—' : rel ? `${p >= q ? '+' : ''}${f((p / q - 1) * 100, 1)} %` : `${p >= q ? '+' : ''}${f(p - q, 1)} %p`}</td></tr>`).join('') +
+    `</tbody></table></div><p class="note" style="margin:8px 0 0">누적곡선 최대 차이 <b>${f(dq, 1)} %p</b>${at ? ` (${fmtD(at, true)} µm 부근)` : ''}. 실측 D값도 누적분포에서 같은 방식으로 다시 계산했어요. 차이 = (예측 − 실측) / 실측.</p>`;
+}
+$('mix-src').addEventListener('input', ev => {
+  const k = ev.target.dataset.f, tr = ev.target.closest('tr[data-id]'); if (!k || !tr) return;
+  const v = numIn(ev.target.value);
+  if (v == null) delete mix[k][tr.dataset.id]; else mix[k][tr.dataset.id] = v;
+  if (k !== 'stock') refreshMix();
+});
+$('mix-fr').addEventListener('input', ev => { const v = numIn(ev.target.value); if (v == null) delete mix.tfr[ev.target.dataset.t]; else mix.tfr[ev.target.dataset.t] = v; });
+$('mix-meas').addEventListener('change', ev => { mix.meas = ev.target.value; renderMixOut(); });
+$('mix-run').addEventListener('click', () => {
+  const total = numIn($('mix-total').value) || null;
+  const src = mixSrc().filter(e => mix.stock[e.id] !== 0);
+  if (src.length < 2) return toast('후보 분말이 2개 이상 있어야 해요 (재고 0인 분말은 빠져요)');
+  const caps = src.map(e => total && mix.stock[e.id] != null ? Math.min(1, mix.stock[e.id] / total) : 1);
+  if (caps.reduce((a, b) => a + b, 0) < 1 - 1e-9) return toast(`재고를 다 합쳐도 ${total} kg이 안 돼요`);
+  const tD = [[10, numIn($('mix-t10').value)], [50, numIn($('mix-t50').value)], [90, numIn($('mix-t90').value)]].filter(t => t[1] > 0);
+  const labs = state.cuts.length ? intervalLabels(state.cuts) : [];
+  const tF = labs.map((l, i) => [i, mix.tfr[l.t]]).filter(t => t[1] != null);
+  if (!tD.length && !tF.length) return toast('목표 D값이나 구간 목표(%)를 하나 이상 넣어 주세요');
+  const grid = unionGrid(src.map(e => e.model.dist)), Qs = src.map(e => qOnGrid(e.model.dist, grid)), rho = src.map(e => mix.rho[e.id]);
+  const evalW = w => { const d = { x: grid, Q: mixQ(Qs, volFrac(w, rho)) }; return { D: tD.map(t => dAt(d, t[0])), F: fractions(d, state.cuts), d }; };
+  // D값은 상대오차(%), 구간은 %p 차이로 제곱합
+  const obj = w => { const r = evalW(w); let e = 0;
+    for (let k = 0; k < tD.length; k++) { if (r.D[k] == null) return 1e12; e += ((r.D[k] / tD[k][1] - 1) * 100) ** 2; }
+    tF.forEach(([i, t]) => { e += (r.F[i] - t) ** 2; }); return e; };
+  const best = optimizeMix(caps, obj), r = evalW(best.w), res = dRes(r.d);
+  mix.opt = src.map((e, k) => [e.id, +(best.w[k] * 100).toFixed(1)]);
+  const kgs = k => total ? fkg(total * best.w[k]) : '—';
+  const sgn = (v, t, rel) => `<span class="kg" style="display:inline">(${v >= t ? '+' : ''}${rel ? f((v / t - 1) * 100, 1) + ' %' : f(v - t, 1) + ' %p'})</span>`;
+  $('mix-opt').innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>분말</th><th>제안 비율 (%)</th><th>무게 (kg)</th><th>재고 (kg)</th></tr></thead><tbody>` +
+    src.map((e, k) => `<tr><td class="txt">${esc(label(e))}</td><td>${f(best.w[k] * 100, 1)}</td><td>${kgs(k)}</td><td>${mix.stock[e.id] ?? '—'}</td></tr>`).join('') +
+    `</tbody></table></div><div class="tbl-wrap" style="margin-top:10px"><table><thead><tr><th>목표 항목</th><th>목표</th><th>예측</th></tr></thead><tbody>` +
+    tD.map((t, k) => `<tr><td class="txt">D${t[0]} (µm)</td><td>${f(t[1])}</td><td>${f(r.D[k])} ${sgn(r.D[k], t[1], true)}</td></tr>`).join('') +
+    tF.map(([i, t]) => `<tr><td class="txt">${esc(labs[i].t)} (%)</td><td>${f(t, 1)}</td><td>${f(r.F[i], 1)} ${sgn(r.F[i], t, false)}</td></tr>`).join('') +
+    `</tbody></table></div><p class="note" style="margin:8px 0">예측 D10 ${f(res.D10)} · D50 ${f(res.D50)} · D90 ${f(res.D90)} µm. 목표를 모두 정확히 맞출 수 없으면 가장 가까운 비율을 보여줘요.</p>
+    <button class="btn" id="mix-apply" type="button">이 비율을 혼합비에 적용</button>`;
+});
+$('mix-opt').addEventListener('click', ev => {
+  if (ev.target.id !== 'mix-apply' || !mix.opt) return;
+  mix.w = Object.fromEntries(mix.opt.filter(([, v]) => v > 0));
+  renderMix(); refreshMix(); toast('제안 비율을 적용했어요');
 });
 
 /* ---------- utilities ---------- */
