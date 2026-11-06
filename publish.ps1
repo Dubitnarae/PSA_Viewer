@@ -9,7 +9,7 @@ Set-Content -Encoding ascii dist\PSA_Viewer.exe.sha256 "$hash  PSA_Viewer.exe"
 $notes = (Get-Content CHANGELOG.md -Raw -Encoding utf8) -split "(?m)^## " | Where-Object { $_.StartsWith("[$ver]") } | Select-Object -First 1
 if (-not $notes) { throw "CHANGELOG.md에 [$ver] 섹션이 없습니다." }
 $notes = ($notes -split "`n", 2)[1].Trim() -replace "(?s)\s*---\s*$", ""
-$nf = New-TemporaryFile; Set-Content -Encoding utf8 $nf $notes
+$nf = New-TemporaryFile; [IO.File]::WriteAllText($nf, $notes)  # BOM 없이
 git tag -f "v$ver"; git push -f origin "v$ver"
 gh release create "v$ver" dist\PSA_Viewer.exe dist\PSA_Viewer.exe.sha256 --title "PSA 입도 뷰어 v$ver" --notes-file $nf
 Remove-Item $nf
