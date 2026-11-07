@@ -441,22 +441,43 @@ function natural(a, b) { return a.localeCompare(b, undefined, { numeric: true })
 if (typeof module !== 'undefined') module.exports = { parseNGB };
 
 /* Malvern Mastersizer 2000 .mea parser — one file holds several measurement records.
-   Record field = [type u16][01 + 8×00][tag u16][payload by type]. */
+   Record field = [type u16][01][name len u32][name][u32 0][tag u16][payload by type].
+   v5 files leave the name empty; older files (e.g. the bundled Examples.mea) spell it out.
+   Tag numbers come from the instrument's own parameter dictionary (Instrument Parameters.cfg, MS2000 v5.60). */
 const MEA_LABELS = {
-  0x00: '시료명', 0x03: '분석 시각', 0x04: '작업자', 0x10: '물질명', 0x11: '입자 굴절률', 0x12: '입자 흡수율',
-  0x14: '분산매', 0x15: '분산매 굴절률', 0x28: '분산 장치', 0x60: '장비 일련번호', 0x6e: '측정 시각',
-  0x75: '구간별 부피 %', 0x76: '구간 경계 (µm)', 0x7b: 'D10 (µm)', 0x7c: 'D20 (µm, 추정)', 0x7d: 'D50 (µm)',
-  0x7e: 'D80 (µm, 추정)', 0x7f: 'D90 (µm)', 0x80: 'D[4,3] (µm)', 0x81: 'D[3,2] (µm)', 0x82: '비표면적 (m²/g, 밀도 1 기준)',
-  0x83: 'Span', 0x101: '저장 시각', 0x102: '저장 사용자', 0x11e: '원래 파일 경로',
+  0x00: '시료명', 0x01: '로트 번호', 0x02: '배치 번호', 0x03: '측정 시각', 0x04: '작업자', 0x05: 'SOP 이름', 0x06: '작업자 메모',
+  0x10: '물질명', 0x11: '입자 굴절률', 0x12: '입자 흡수율', 0x13: '입자 밀도 (g/cm³)', 0x14: '분산매', 0x15: '분산매 굴절률',
+  0x16: '측정 적분 시간 (ms)', 0x17: '배경 적분 시간 (ms)', 0x1a: '차폐율 상한 (%)', 0x1b: '차폐율 하한 (%)', 0x1f: '분석 모델',
+  0x28: '분산 장치', 0x2a: '건식 장치', 0x2c: '빔 길이 (mm)', 0x2d: '펌프 속도', 0x2e: '피더 속도 (%)', 0x2f: '교반 속도',
+  0x30: '분산 압력 (bar)', 0x31: '초음파 세기', 0x33: '초음파 시간', 0x3e: '측정 횟수', 0x3f: '이번 측정 순번',
+  0x59: '배경 경보', 0x5a: '레이저 경보', 0x5b: '정렬 경보', 0x5c: '농도 경보 (높음)', 0x5d: '농도 경보 (낮음)', 0x5e: '입경 경보', 0x5f: '적분 경보',
+  0x60: '장비 일련번호', 0x65: '보정 벡터', 0x66: '소프트웨어 버전', 0x6e: '정렬 시각', 0x6f: '배경 신호', 0x70: '배경 측정 시각',
+  0x71: '시료 원신호', 0x72: '차폐율 (%)', 0x73: '보정된 시료 신호', 0x74: '결과 구간 수', 0x75: '구간별 부피 %', 0x76: '구간 경계 (µm)',
+  0x77: '저장 시각', 0x78: '잔차 (%)', 0x79: '피팅 신호', 0x7a: '농도 (%Vol)', 0x7b: 'D10 (µm)', 0x7c: 'D20 (µm)', 0x7d: 'D50 (µm)',
+  0x7e: 'D80 (µm)', 0x7f: 'D90 (µm)', 0x80: 'D[4,3] (µm)', 0x81: 'D[3,2] (µm)', 0x82: '비표면적 (m²/g)', 0x83: 'Span', 0x84: 'Mode (µm)',
+  0x85: '균일도 (Uniformity)', 0xb4: '분석 시각', 0xd6: 'D10 경보', 0xd7: 'D50 경보', 0xd8: 'D90 경보', 0xe0: '불규칙 입자 모드',
+  0xe2: '차폐율 - 청색 (%)', 0xe3: '가중 잔차 (%)', 0xe4: '검출기 가중치', 0xeb: '기록 번호', 0xf6: '온도 경보', 0xfb: '계산 감도',
+  0xfc: '수정된 시료 신호', 0xff: '편집 원본 기록', 0x100: '편집 사유', 0x101: '편집 시각', 0x102: '편집자', 0x11c: '작업자 전체 이름',
+  0x11e: '원래 파일 경로',
 };
+const MEA_MODELS = ['General purpose', 'Multiple narrow modes', 'Single narrow mode'];
+const MEA_ALARMS = [0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0xd6, 0xd7, 0xd8, 0xf6];
 function parseMEA(u8) {
   const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
   let kr; try { kr = new TextDecoder('euc-kr'); } catch (e) { kr = new TextDecoder('latin1'); }
-  const isHdr = i => { if (u8[i + 2] !== 1) return false; for (let k = 3; k < 11; k++) if (u8[i + k] !== 0) return false; return true; };
+  // returns the name length (0 in v5 files) or -1 when i is not a field header
+  const hdrName = i => {
+    if (u8[i + 2] !== 1 || i + 11 > u8.length) return -1;
+    const n = dv.getUint32(i + 3, true); if (n > 64 || i + 11 + n > u8.length) return -1;
+    for (let k = 0; k < n; k++) if (u8[i + 7 + k] < 32 || u8[i + 7 + k] > 126) return -1;
+    for (let k = 7 + n; k < 11 + n; k++) if (u8[i + k] !== 0) return -1;
+    return n;
+  };
   const fields = []; let i = 0;
   while (i < u8.length - 13) {
-    if (!isHdr(i)) { i++; continue; }
-    const t = dv.getUint16(i, true); let p = i + 11;
+    const n = hdrName(i);
+    if (n < 0) { i++; continue; }
+    const t = dv.getUint16(i, true); let p = i + 11 + n;
     if (t === 0x0566) { fields.push({ t, tag: null }); i = p; continue; }
     const tag = dv.getUint16(p, true); p += 2; let v, type;
     try {
@@ -472,10 +493,10 @@ function parseMEA(u8) {
     } catch (e) { i++; continue; }
     fields.push({ t, tag, type, value: v }); i = p;
   }
-  // split into records at each 0x011f group marker
+  // each record's parameter set starts with SAMPLE_NAME (tag 0, text)
   const recs = []; let cur = null;
   for (const f of fields) {
-    if (f.type === 'group' && f.tag === 0x11f) { if (cur) recs.push(cur); cur = []; continue; }
+    if (f.tag === 0 && f.type === 'text') { if (cur) recs.push(cur); cur = []; }
     if (cur && f.tag != null && f.type !== 'group') cur.push(f);
   }
   if (cur) recs.push(cur);
@@ -496,24 +517,34 @@ function parseMEA(u8) {
     const num = t => (typeof F[t] === 'number' && isFinite(F[t]) ? F[t] : null);
     // the instrument stores times as local wall-clock OLE dates; show them as-is
     const local = d => { const u = ole(d); return u ? new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds()) : null; };
-    const disp = F[0x14] || '';
+    const disp = F[0x14] || '', dry = F[0x2a] === 1 || !disp, obs = num(0x72);
+    MEA_ALARMS.forEach(t => { if (F[t]) warnings.push(`장비 경보가 기록돼 있어요: ${MEA_LABELS[t]}`); });
+    // MS2000 help (Advice on obscuration limits): dry obscuration should not generally exceed 5–6 %
+    if (dry && obs > 6) warnings.push(`건식 측정 차폐율이 ${obs.toFixed(1)}%예요. 장비 도움말 권장 상한(5~6%)보다 높아요.`);
+    const edited = local(F[0x101]);
     return {
       kind: 'mea', record: k + 1, records: recs.length,
       meta: {
         sample: F[0x00] || `기록 ${k + 1}`, material: F[0x10] || '', dataId: `기록 ${k + 1}/${recs.length}`,
         model: 'Mastersizer 2000', mfgNo: F[0x60] || '', dispersant: disp ? `${disp}` : '건식 (공기)', unit: F[0x28] || '',
         ri: num(0x11) != null ? `${num(0x11).toFixed(2)} (흡수 ${num(0x12) != null ? +num(0x12).toFixed(3) : '—'})` : '',
-        measTime: local(F[0x6e]) || local(F[0x03]), source: F[0x11e] || '', operator: F[0x04] || '',
+        measTime: local(F[0x03]) || local(F[0x6e]), source: F[0x11e] || '', operator: F[0x04] || '',
+        sop: F[0x05] || '', lot: F[0x01] || '', notes: F[0x06] || '', density: num(0x13), version: F[0x66] || '',
+        calc: [MEA_MODELS[F[0x1f]] || '', F[0xe0] === 1 ? '불규칙 입자' : F[0xe0] === 0 ? '구형 입자' : ''].filter(Boolean).join(' · '),
+        disperse: dry ? [num(0x30) ? `압력 ${+num(0x30).toFixed(2)} bar` : '', num(0x2e) ? `피더 ${+num(0x2e).toFixed(0)}%` : ''].filter(Boolean).join(' · ')
+          : [num(0x2d) ? `펌프 ${+num(0x2d).toFixed(0)} rpm` : '', num(0x2f) ? `교반 ${+num(0x2f).toFixed(0)}` : '', num(0x31) ? `초음파 ${+num(0x31).toFixed(0)}%` : ''].filter(Boolean).join(' · '),
+        edit: edited ? `${fmtTime(edited)}${F[0x102] ? ' · ' + F[0x102] : ''}${F[0x100] ? ' · ' + F[0x100] : ''}` : '',
       },
       results: {
         D10: num(0x7b), D50: num(0x7d), D90: num(0x7f), Span: num(0x83), D43: num(0x80), D32: num(0x81), SSA_m2g: num(0x82),
-        D20: num(0x7c), D80: num(0x7e), Mean: num(0x80), Mode: null, CV: null, SSA: null,
+        D20: num(0x7c), D80: num(0x7e), Mean: num(0x80), Mode: num(0x84), CV: null, SSA: null, Uniformity: num(0x85),
+        Obs: obs, ObsBlue: num(0xe2), Residual: num(0x78), WResidual: num(0xe3), Conc: num(0x7a),
       },
       d50calc, dist, warnings,
       streams: [{ name: `기록 ${k + 1}`, kind: 'props', size: 0, labels: [F[0x00] || ''],
         props: fs.map(f => ({ name: `${MEA_LABELS[f.tag] ? MEA_LABELS[f.tag] + ' · ' : ''}0x${f.tag.toString(16).padStart(2, '0')}`, type: f.type,
           value: f.type === 'double' && f.value > 30000 && f.value < 80000 ? `${f.value} (${(local(f.value) || '').toLocaleString?.('ko-KR') || ''})` : f.value })) }],
-      rawSignature: (F[0x6f] || []).reduce((a, b) => a + b, 0),
+      rawSignature: (F[0x71] || []).reduce((a, b) => a + b, 0),
     };
   });
   // same raw scattering signal in two records → flag it
@@ -752,16 +783,26 @@ function renderReadout() {
       <dt>Span</dt><dd>${f(v.Span, 3)}</dd>
       <dt>D[4,3] 부피평균</dt><dd>${f(v.D43)} µm</dd>
       <dt>D[3,2] 면적평균</dt><dd>${f(v.D32)} µm</dd>
-      <dt>D20 / D80 (추정)</dt><dd>${f(v.D20)} / ${f(v.D80)} µm</dd>
+      <dt>D20 / D80</dt><dd>${f(v.D20)} / ${f(v.D80)} µm</dd>
+      <dt>Mode</dt><dd>${f(v.Mode)} µm</dd>
+      <dt>균일도</dt><dd>${f(v.Uniformity, 3)}</dd>
       <dt>비표면적*</dt><dd>${f(v.SSA_m2g, 4)} m²/g</dd>
+      <dt>차폐율</dt><dd>${f(v.Obs)} %${v.ObsBlue ? ` (청색 ${f(v.ObsBlue)} %)` : ''}</dd>
+      <dt>잔차 / 가중 잔차</dt><dd>${f(v.Residual, 3)} / ${f(v.WResidual, 3)} %</dd>
+      <dt>농도</dt><dd>${f(v.Conc, 4)} %Vol</dd>
       <dt>물질 / 굴절률</dt><dd>${esc(m.material || '—')} · ${esc(m.ri || '—')}</dd>
       <dt>분산매</dt><dd>${esc(m.dispersant)}</dd>
-      <dt>분산 장치</dt><dd>${esc(m.unit || '—')}</dd>
+      <dt>분산 장치</dt><dd>${esc(m.unit || '—')}${m.disperse ? ' · ' + esc(m.disperse) : ''}</dd>
+      <dt>분석 모델</dt><dd>${esc(m.calc || '—')}</dd>
+      <dt>SOP</dt><dd>${esc(m.sop || '—')}</dd>
+      ${m.lot ? `<dt>로트</dt><dd>${esc(m.lot)}</dd>` : ''}
+      ${m.notes ? `<dt>메모</dt><dd>${esc(m.notes)}</dd>` : ''}
+      ${m.edit ? `<dt>결과 편집</dt><dd>${esc(m.edit)}</dd>` : ''}
       <dt>기록</dt><dd>${esc(m.dataId)}</dd>
       <dt>작업자</dt><dd>${esc(m.operator || '—')}</dd>
-      <dt>장비 번호</dt><dd>${esc(m.mfgNo || '—')}</dd>
+      <dt>장비 번호</dt><dd>${esc(m.mfgNo || '—')}${m.version ? ' · v' + esc(m.version) : ''}</dd>
       <dt>원래 위치</dt><dd style="font-size:11.5px">${esc(m.source || '—')}</dd>
-    </dl><div class="check">* 입자 밀도 1 g/cm³ 기준으로 장비가 계산한 값</div>` : `<dl class="kv">
+    </dl><div class="check">* 기록에 저장된 입자 밀도 ${m.density == null ? '—' : +m.density.toFixed(3)} g/cm³ 기준으로 장비가 계산한 값${m.density === 1 ? ' (밀도 기본값 1이라 실제 비표면적은 이 값 ÷ 실제 밀도)' : ''}</div>` : `<dl class="kv">
       <dt>Span</dt><dd>${f(v.Span)}</dd>
       <dt>Mode</dt><dd>${f(v.Mode)} µm</dd>
       <dt>평균 (Mean)</dt><dd>${f(v.Mean)} µm</dd>

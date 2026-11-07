@@ -93,3 +93,6 @@ sample.js
 PSA_Data/
 *.psa
 psa_viewer_settings.json
+
+# Malvern 원본 설치 파일(상용 소프트웨어·매뉴얼) - 리버스 엔지니어링 참고용, 절대 커밋 금지
+원본 프로그램/
