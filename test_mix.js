@@ -2,7 +2,7 @@
 const fs = require('fs');
 const src = fs.readFileSync(require("path").join(__dirname, "index.html"), 'utf8');
 const grab = n => { const i = src.indexOf(`function ${n}(`); let d = 0, j = src.indexOf('{', i); for (; ; j++) { if (src[j] === '{') d++; if (src[j] === '}' && !--d) break; } return src.slice(i, j + 1); };
-eval(['underAt', 'fractions', 'unionGrid', 'qOnGrid', 'mixQ', 'toDist', 'dAt', 'dRes', 'volFrac', 'optimizeMix', 'corrOn', 'fixQ'].map(grab).join('\n'));
+eval(['underAt', 'fractions', 'unionGrid', 'qOnGrid', 'mixQ', 'toDist', 'dAt', 'dRes', 'volFrac', 'optimizeMix', 'corrOn', 'fixQ', 'avgDist', 'sieveTable'].map(grab).join('\n'));
 const assert = require('assert');
 // lognormal powders on a log grid
 const x = Array.from({ length: 101 }, (_, i) => 0.1 * 10 ** (i * 0.04));
@@ -37,4 +37,11 @@ const fixed = { x: G, Q: fixQ(pred.Q, corrOn(G, [rec])) };
 assert(Math.abs(dAt(fixed, 50) / dAt(meas, 50) - 1) < 0.01, [dAt(fixed, 50), dAt(meas, 50)]);
 assert(fixed.Q.every((v, i) => v >= 0 && v <= 100 && (!i || v >= fixed.Q[i - 1])));
 assert(fixQ(pred.Q, null) === pred.Q);
+// 7) 평균 기록: 같은 분포 둘의 평균은 그대로, A·B 평균은 50:50 혼합과 같음
+assert(Math.abs(dAt(avgDist([A, A]), 50) - 10) < 0.1);
+assert(Math.abs(dAt(avgDist([A, B]), 50) - dAt({ x: G, Q: mixQ(Qs, [0.5, 0.5]) }, 50)) < 1e-6);
+// 8) 체 표: 통과는 체가 작을수록 줄고, 체 위 합 + 받침 = 100
+const sv = [[106, 140], [53, 270], [25, 500]], st = sieveTable(B, sv);
+assert(st[0][0] >= st[1][0] && st[1][0] >= st[2][0]);
+assert(Math.abs(st.reduce((a, r) => a + r[1], 0) + st[2][0] - 100) < 1e-9);
 console.log('ok', best.w.map(v => v.toFixed(3)), (performance.now() - t0).toFixed(0) + 'ms');

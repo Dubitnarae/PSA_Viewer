@@ -140,9 +140,35 @@ details.st table td.t { color: var(--ink-3); font-size: 11.5px; white-space: now
   padding: 10px 18px; border-radius: 999px; font-size: 13px; z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
 textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-size: 12px; margin-top: 8px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; }
 @media (prefers-reduced-motion: no-preference) { .chip, .btn, .preset { transition: border-color .15s, background .15s, transform .1s; } }
+.search.sel { width: auto; }
+th.sort { cursor: pointer; } th.sort:hover { color: var(--accent); }
+details.cols { margin: 0 0 10px; } details.cols summary { cursor: pointer; color: var(--ink-2); font-size: 13px; padding: 4px 0 8px; }
+.presets label.preset { display: inline-flex; gap: 6px; align-items: center; }
+.sig2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 880px) { .sig2 { grid-template-columns: 1fr; } }
+.sig2 h3 { margin-top: 4px; }
+.lsvg svg { width: 100%; height: auto; display: block; }
+.print-only { display: none; }
+/* 인쇄: 결과 화면만 남기고 조작 버튼·입력·긴 표는 뺌 */
+@media print {
+  @page { margin: 12mm; }
+  body { background: #fff; padding: 0; font-size: 12px; }
+  .wrap { max-width: none; gap: 10px; }
+  .print-only { display: block; }
+  #print-head h1 { font-size: 20px; } #print-head p { margin: 2px 0 0; color: #555; font-size: 11px; }
+  header, .tools, .btn, .ctrl, details.cols, .chip .x, .rail .hint, .drop, .toast, #mix-panel, #lib-panel, #raw-panel, #dist-panel, #warns:empty, #yield-range[hidden] { display: none !important; }
+  .panel, .rail { box-shadow: none; border: 1px solid #d2d2d7; padding: 12px 14px; }
+  #chart, #yield-panel, #sig-panel, #compare-panel { break-inside: avoid; }
+  .scroll, .tbl-wrap { max-height: none; overflow: visible; }
+  table { font-size: 9.5px; } th, td { padding: 3px 5px; white-space: normal; } th { position: static; }
+  .main { grid-template-columns: minmax(0, 1fr) 270px; }
+  .dv { padding: 6px 8px; } .dv .v { font-size: 17px; }
+  .sig2 { grid-template-columns: 1fr 1fr; }
+}
 </style>
 
 <div class="wrap">
+  <div class="print-only" id="print-head"></div>
   <header>
     <div>
       <h1>PSA 입도 뷰어 <small id="ver"></small></h1>
@@ -150,6 +176,7 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
       <p class="sub">HORIBA LA-960(.ngb)과 Malvern Mastersizer 2000(.mea) 입도분석 결과를 이 PC 안에서만 읽고 정리해요. 파일은 밖으로 나가지 않습니다.</p>
     </div>
     <div class="tools">
+      <button class="btn" id="print" type="button">보고서 인쇄</button>
       <button class="btn" id="proj-open" type="button" hidden>작업 열기</button>
       <button class="btn" id="proj-save" type="button" hidden>작업 저장</button>
       <label class="btn primary" for="file-input">파일 열기 (.ngb · .mea)</label>
@@ -164,7 +191,10 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
     <section class="panel">
       <div class="panel-head">
         <h2>입도분포</h2>
-        <span class="meta">위: 빈도 q (%) · 아래: 누적 Q (%) · 가로축 로그</span>
+        <div class="tools">
+          <select id="view-freq" class="search sel" aria-label="빈도 표시 방식"><option value="auto">빈도: 기본</option><option value="bar">빈도: 막대</option><option value="line">빈도: 곡선</option></select>
+          <select id="view-cum" class="search sel" aria-label="누적 곡선 방향"><option value="under">누적: 이하 (통과)</option><option value="over">누적: 이상 (잔류)</option></select>
+        </div>
       </div>
       <div id="chart"></div>
     </section>
@@ -205,6 +235,21 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
     <p class="note" id="yield-note" style="margin:10px 0 0">누적분포를 측정 채널 사이에서 로그 보간해 계산해요(D10·D50·D90을 구하는 방식과 같음). 레이저 회절 결과라 체 분급 수율과는 입자 형상 때문에 차이가 날 수 있고, 무게 환산은 분포가 부피 기준이면서 입자 밀도가 같다고 가정한 값이에요.</p>
   </section>
 
+  <section class="panel" id="sieve-panel">
+    <div class="panel-head">
+      <h2>표준 체 환산 <span class="meta">ASTM E11</span></h2>
+      <div class="tools"><button class="btn" id="copy-sieve" type="button">체 표 복사</button></div>
+    </div>
+    <p class="note">누적분포를 표준 체 눈금에서 읽은 값이에요. <b>통과</b> = 그 체를 빠져나가는 양(이하 %), <b>체 위</b> = 그 체에 남고 바로 위 체는 통과한 양이에요. 맨 위 체의 “체 위”는 그보다 큰 입자 전부예요. 입자 형상 때문에 실제 체 분석과 차이가 날 수 있어요.</p>
+    <div class="tbl-wrap scroll"><table id="sieve"></table></div>
+  </section>
+
+  <section class="panel" id="sig-panel" hidden>
+    <div class="panel-head"><h2>측정 신호 <span class="meta" id="sig-name"></span></h2></div>
+    <p class="note">Mastersizer가 기록한 검출기별 빛 신호예요. <b>배경</b>이 바깥 검출기(큰 번호)에서 높으면 셀·렌즈 오염을 의심하고, <b>피팅</b>에서 실측과 계산이 크게 벌어지면 굴절률·흡수율 설정을 의심해요. 0번(중심 검출기)은 값이 커서 그래프에서 뺐어요.</p>
+    <div class="sig2"><div><h3>배경 · 시료 원신호</h3><div id="sig-raw"></div></div><div><h3>피팅 (실측 vs 계산)</h3><div id="sig-fit"></div></div></div>
+  </section>
+
   <section class="panel" id="mix-panel">
     <div class="panel-head">
       <h2>혼합 예측</h2>
@@ -242,7 +287,7 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
   <section class="panel" id="compare-panel">
     <div class="panel-head">
       <h2>결과 비교</h2>
-      <div class="tools"><button class="btn" id="copy-compare" type="button">표 복사 (엑셀 붙여넣기용)</button></div>
+      <div class="tools"><button class="btn" id="avg-make" type="button">평균 기록 만들기</button><button class="btn" id="copy-compare" type="button">표 복사 (엑셀 붙여넣기용)</button></div>
     </div>
     <div class="tbl-wrap"><table id="compare"></table></div>
     <p class="note" id="compare-note" hidden style="margin:10px 0 0">변동계수 참고 기준: ISO 13320 반복성 권장치 D50 3% 이하, D10·D90 5% 이하 (D50이 10 µm 이상일 때). 넘는 값은 “초과”로 표시돼요.</p>
@@ -258,12 +303,24 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
         <button class="btn danger" id="lib-del" type="button">선택 삭제</button>
       </div>
     </div>
-    <p class="note">연 파일은 원본 사본과 함께 이 목록에 자동 저장돼요. 로트·메모 칸은 눌러서 바로 고칠 수 있고, 줄을 두 번 누르면 그래프로 열려요. 수율 열은 위 “수율 계산”의 기준 입경을 따라요.</p>
+    <p class="note">연 파일은 원본 사본과 함께 이 목록에 자동 저장돼요. 로트·메모 칸은 눌러서 바로 고칠 수 있고, 줄을 두 번 누르면 그래프로 열려요. 열 이름을 누르면 정렬돼요. 수율 열은 위 “수율 계산”의 기준 입경을 따라요.</p>
+    <div class="ctrl" id="cond-add">
+      <div class="field"><label for="cond-k">조건 항목</label><select id="cond-k" class="search sel"></select></div>
+      <div class="field"><label for="cond-op">조건</label><select id="cond-op" class="search sel"><option value="ge">이상 (≥)</option><option value="le">이하 (≤)</option></select></div>
+      <div class="field"><label for="cond-v">값</label><input id="cond-v" class="sm" type="text" autocomplete="off" placeholder="숫자"></div>
+      <button class="btn" id="cond-btn" type="button">조건 추가</button>
+      <div class="presets" id="cond-list"></div>
+    </div>
+    <details class="cols"><summary>표에 보일 열 고르기 (CSV 저장도 이 열을 따라요)</summary><div class="presets" id="lib-cols"></div></details>
     <div class="tbl-wrap scroll" style="max-height:460px"><table id="lib"></table></div>
+    <h3>추이 그래프</h3>
+    <div class="ctrl" style="margin-bottom:4px"><div class="field"><label for="trend-k">항목</label><select id="trend-k" class="search sel"></select></div>
+      <p class="note" style="margin:0 0 6px">위 목록에 보이는 기록(검색·조건 적용 후)을 측정 일시 순으로 그려요. 제품별로 보려면 검색으로 먼저 좁혀 주세요.</p></div>
+    <div id="trend"></div>
     <p class="note" style="margin:10px 0 0">저장 위치: <span class="mono" id="lib-dir"></span> · <button class="link" id="lib-folder" type="button">폴더 열기</button> · <button class="link" id="lib-move" type="button">위치 변경</button></p>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="dist-panel">
     <div class="panel-head">
       <h2 id="dist-title">채널 데이터</h2>
       <div class="tools"><button class="btn" id="copy-dist" type="button">채널 데이터 복사</button></div>
@@ -271,7 +328,7 @@ textarea.copybox { width: 100%; height: 120px; font-family: var(--mono); font-si
     <div class="tbl-wrap scroll"><table id="dist"></table></div>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="raw-panel">
     <div class="panel-head">
       <h2 id="raw-title">파싱된 전체 항목</h2>
       <input class="search" id="raw-search" type="search" placeholder="항목 이름이나 값으로 찾기" aria-label="항목 검색">
@@ -545,6 +602,8 @@ function parseMEA(u8) {
         props: fs.map(f => ({ name: `${MEA_LABELS[f.tag] ? MEA_LABELS[f.tag] + ' · ' : ''}0x${f.tag.toString(16).padStart(2, '0')}`, type: f.type,
           value: f.type === 'double' && f.value > 30000 && f.value < 80000 ? `${f.value} (${(local(f.value) || '').toLocaleString?.('ko-KR') || ''})` : f.value })) }],
       rawSignature: (F[0x71] || []).reduce((a, b) => a + b, 0),
+      // detector light energy: 0x73[0] is the obscuration, 0x73[1..] lines up with the fit vector 0x79 (checked on real files)
+      signal: Array.isArray(F[0x71]) ? { bg: F[0x6f] || null, raw: F[0x71], corr: F[0x73] || null, fit: F[0x79] || null } : null,
     };
   });
   // same raw scattering signal in two records → flag it
@@ -630,7 +689,16 @@ function showBatch(batch) {
   batch.forEach(b => addFile(b.name, null, false, b.model, b.sha));
 }
 
-function render() { syncMix(); renderMix(); renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderCompare(); renderLib(); renderDist(); renderRaw(); }
+function render() { syncMix(); renderMix(); renderRail(); renderWarns(); renderChart(); renderReadout(); renderYield(); renderSieve(); renderSig(); renderCompare(); renderLib(); renderDist(); renderRaw(); }
+
+const view = { freq: 'auto', cum: 'under' };
+try { Object.assign(view, JSON.parse(localStorage.getItem('psa.view') || '{}')); } catch (e) {}
+$('view-freq').value = view.freq; $('view-cum').value = view.cum;
+['freq', 'cum'].forEach(k => $('view-' + k).addEventListener('change', ev => {
+  view[k] = ev.target.value; try { localStorage.setItem('psa.view', JSON.stringify(view)); } catch (e) {}
+  renderChart();
+}));
+const isCalc = e => e.model.kind === 'mix' || e.model.kind === 'avg'; // 측정값이 아닌 계산 결과
 
 function renderRail() {
   const r = $('rail');
@@ -638,7 +706,7 @@ function renderRail() {
   r.innerHTML = state.files.map(e => `
     <span class="chip" role="button" tabindex="0" aria-pressed="${e.id === state.active}" data-id="${e.id}" title="${esc(e.name)}">
       <span class="sw" style="background:${col(e)}"></span><span class="nm">${esc(label(e))}</span>
-      ${e.isSample ? '<span class="tag">예시 파일</span>' : ''}${e.model.kind === 'mix' ? '<span class="tag">예측</span>' : ''}
+      ${e.isSample ? '<span class="tag">예시 파일</span>' : ''}${e.model.kind === 'mix' ? '<span class="tag">예측</span>' : ''}${e.model.kind === 'avg' ? '<span class="tag">평균</span>' : ''}
       <button class="x" type="button" aria-label="${esc(e.name)} 닫기" data-close="${e.id}">×</button>
     </span>`).join('') + '<span class="hint">파일을 더 끌어다 놓으면 겹쳐서 비교돼요</span>';
 }
@@ -669,7 +737,8 @@ function renderChart() {
   const L0 = Math.floor(Math.log10(lo)), L1 = Math.ceil(Math.log10(hi));
   const X = d => ML + (Math.log10(d) - L0) / (L1 - L0) * (W - ML - MR);
   const ymax = niceMax(qmax * 1.12);
-  const Y1 = v => PT1 + PH1 - v / ymax * PH1, Y2 = v => PT2 + PH2 - v / 100 * PH2;
+  const over = view.cum === 'over', cum = v => over ? 100 - v : v;
+  const Y1 = v => PT1 + PH1 - v / ymax * PH1, Y2 = v => PT2 + PH2 - cum(v) / 100 * PH2;
   let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="입도분포 그래프" font-family="var(--sans)" font-size="12">`;
   // grids
   let g = '';
@@ -682,22 +751,26 @@ function renderChart() {
   }
   const qstep = niceMax(ymax / 5);
   for (let v = 0; v <= ymax + 1e-9; v += qstep) g += `<line x1="${ML}" x2="${W - MR}" y1="${Y1(v)}" y2="${Y1(v)}" stroke="var(--grid)"/><text x="${ML - 8}" y="${Y1(v) + 4}" text-anchor="end" fill="var(--ink-2)" class="num">${+v.toFixed(2)}</text>`;
-  for (let v = 0; v <= 100; v += 20) g += `<line x1="${ML}" x2="${W - MR}" y1="${Y2(v)}" y2="${Y2(v)}" stroke="var(--grid)"/><text x="${ML - 8}" y="${Y2(v) + 4}" text-anchor="end" fill="var(--ink-2)" class="num">${v}</text>`;
+  for (let v = 0; v <= 100; v += 20) g += `<line x1="${ML}" x2="${W - MR}" y1="${Y2(cum(v))}" y2="${Y2(cum(v))}" stroke="var(--grid)"/><text x="${ML - 8}" y="${Y2(cum(v)) + 4}" text-anchor="end" fill="var(--ink-2)" class="num">${v}</text>`;
   s += g;
   s += `<line x1="${ML}" x2="${W - MR}" y1="${PT1 + PH1}" y2="${PT1 + PH1}" stroke="var(--ink-3)"/><line x1="${ML}" x2="${W - MR}" y1="${PT2 + PH2}" y2="${PT2 + PH2}" stroke="var(--ink-3)"/>`;
   s += `<text x="14" y="${PT1 + PH1 / 2}" transform="rotate(-90 14 ${PT1 + PH1 / 2})" text-anchor="middle" fill="var(--ink-2)">q (%)</text>`;
-  s += `<text x="14" y="${PT2 + PH2 / 2}" transform="rotate(-90 14 ${PT2 + PH2 / 2})" text-anchor="middle" fill="var(--ink-2)">Q (%)</text>`;
+  s += `<text x="14" y="${PT2 + PH2 / 2}" transform="rotate(-90 14 ${PT2 + PH2 / 2})" text-anchor="middle" fill="var(--ink-2)">${over ? '누적 이상 (%)' : '누적 이하 Q (%)'}</text>`;
   s += `<text x="${(ML + W - MR) / 2}" y="${H - 6}" text-anchor="middle" fill="var(--ink-2)">입경 (µm)</text>`;
   s += `<defs><clipPath id="clip"><rect x="${ML}" y="0" width="${W - ML - MR}" height="${H}"/></clipPath></defs><g clip-path="url(#clip)">`;
   const act = activeFile();
   const order = [...files.filter(e => e !== act), ...files.filter(e => e === act)];
   order.forEach(e => {
     const { x, q, Q } = e.model.dist, c = col(e), isAct = e === act, dash = e.model.kind === 'mix' ? ' stroke-dasharray="6 4"' : '';
-    if (files.length === 1) {
+    const fm = view.freq === 'auto' ? (files.length === 1 ? 'bar' : 'step') : view.freq;
+    if (fm === 'bar') {
       for (let i = 1; i < x.length; i++) if (q[i] > 0) {
-        const x0 = X(x[i - 1]) + 1, x1 = X(x[i]) - 1;
-        s += `<path d="M${x0} ${Y1(0)}V${Y1(q[i]) + 3}q0 -3 3 -3H${x1 - 3}q3 0 3 3V${Y1(0)}Z" fill="${c}"/>`;
+        const x0 = X(x[i - 1]) + 1, x1 = Math.max(x0 + 0.5, X(x[i]) - 1), r = Math.min(3, (x1 - x0) / 2);
+        s += `<path d="M${x0} ${Y1(0)}V${Y1(q[i]) + r}q0 -${r} ${r} -${r}H${x1 - r}q${r} 0 ${r} ${r}V${Y1(0)}Z" fill="${c}"${files.length > 1 ? ` fill-opacity="${isAct ? .6 : .25}"` : ''}/>`;
       }
+    } else if (fm === 'line') {
+      // 채널 가운데(기하평균)에 점을 찍어 이은 빈도 곡선
+      s += `<polyline points="${x.slice(1).map((d, i) => `${X(Math.sqrt(x[i] * d)).toFixed(1)},${Y1(q[i + 1]).toFixed(1)}`).join(' ')}" fill="none" stroke="${c}" stroke-width="${isAct ? 2 : 1.5}" stroke-linejoin="round"${dash}/>`;
     } else {
       let d = `M${X(x[0])} ${Y1(0)}`;
       for (let i = 1; i < x.length; i++) d += `H${X(x[i - 1]).toFixed(1)}V${Y1(q[i]).toFixed(1)}H${X(x[i]).toFixed(1)}`;
@@ -722,11 +795,11 @@ function renderChart() {
     if (c <= Math.pow(10, L0) || c >= Math.pow(10, L1)) return;
     const xx = X(c), u = underAt(act.model.dist, c);
     s += `<line x1="${xx}" x2="${xx}" y1="${PT1}" y2="${PT2 + PH2}" stroke="var(--warn)" stroke-width="1.25"/>`;
-    s += `<text x="${xx + 5}" y="${PT2 + 12}" fill="var(--warn)" font-size="11.5" font-weight="600">${+c} µm<tspan font-weight="400" class="num"> · 이하 ${f(u, 1)}%</tspan></text>`;
+    s += `<text x="${xx + 5}" y="${PT2 + 12}" fill="var(--warn)" font-size="11.5" font-weight="600">${+c} µm<tspan font-weight="400" class="num"> · ${over ? '이상' : '이하'} ${f(cum(u), 1)}%</tspan></text>`;
   });
   s += `<line id="cross" x1="0" x2="0" y1="${PT1}" y2="${PT2 + PH2}" stroke="var(--ink-2)" stroke-width="1" visibility="hidden"/>`;
   s += `<rect id="hit" x="${ML}" y="${PT1}" width="${W - ML - MR}" height="${PT2 + PH2 - PT1}" fill="transparent"/>`;
-  const mixed = new Set(files.filter(e => e.model.kind !== 'mix').map(e => e.model.kind || 'ngb')).size > 1;
+  const mixed = new Set(files.filter(e => !isCalc(e)).map(e => e.model.kind || 'ngb')).size > 1;
   s += '</svg><div class="tip" id="tip" hidden></div>';
   if (mixed) s += '<p class="note" style="margin:8px 0 0">LA-960과 Mastersizer는 측정 채널 폭이 달라 빈도(q) 높이를 직접 비교하기 어려워요. 누적(Q) 곡선과 D값으로 비교해 주세요. 측정 방식(건식/습식)도 다를 수 있어요.</p>';
   box.innerHTML = s;
@@ -742,7 +815,7 @@ function renderChart() {
     tip.innerHTML = `<div class="hd">${fmtD(xs[i], true)} µm</div>` + files.map(e => {
       const k = e.model.dist.x.findIndex(v => Math.abs(v / xs[i] - 1) < 1e-3);
       const Qv = k < 0 ? underAt(e.model.dist, xs[i]) : e.model.dist.Q[k];
-      return `<div class="row"><span class="sw" style="background:${col(e)}"></span><span class="l">${esc(label(e))}</span><span>q ${k < 0 ? '—' : f(e.model.dist.q[k])}</span><span>Q ${f(Qv)}${k < 0 ? '*' : ''}</span></div>`;
+      return `<div class="row"><span class="sw" style="background:${col(e)}"></span><span class="l">${esc(label(e))}</span><span>q ${k < 0 ? '—' : f(e.model.dist.q[k])}</span><span>${over ? '이상' : 'Q'} ${f(cum(Qv))}${k < 0 ? '*' : ''}</span></div>`;
     }).join('') + (mixed ? '<div class="row" style="grid-template-columns:1fr"><span class="l">* 채널이 달라 누적값을 보간함</span></div>' : '');
     tip.hidden = false;
     const bx = box.getBoundingClientRect(), px = ev.clientX - bx.left, py = ev.clientY - bx.top;
@@ -769,6 +842,14 @@ function renderReadout() {
       <div class="dvals">${['D10', 'D50', 'D90'].map(k => `<div class="dv"><div class="k">${k}</div><div class="v">${f(v[k])}</div><div class="u">µm</div></div>`).join('')}</div>
       <dl class="kv"><dt>Span</dt><dd>${f(v.Span, 3)}</dd>${e.model.comp.map(c => `<dt>${esc(c.name)}</dt><dd>${f(c.w * 100, 1)} %</dd>`).join('')}</dl>
       <div class="check">무게 혼합비 기준 · ${e.model.useRho ? '밀도로 부피 분율 환산' : '밀도가 같다고 가정'}${e.model.corrN ? ` · 보정 묶음 “${esc(mix.group)}” ${e.model.corrN}건 적용` : ''}</div>`;
+    return;
+  }
+  if (e.model.kind === 'avg') {
+    r.innerHTML = `<div class="sample"><span class="sw" style="background:${col(e)}"></span>${esc(m.sample)}</div>
+      <div class="when">측정 ${e.model.members.length}건의 누적분포를 같은 비중으로 평균한 기록이에요</div>
+      <div class="dvals">${['D10', 'D50', 'D90'].map(k => `<div class="dv"><div class="k">${k}</div><div class="v">${f(v[k])}</div><div class="u">µm</div></div>`).join('')}</div>
+      <dl class="kv"><dt>Span</dt><dd>${f(v.Span, 3)}</dd>${e.model.members.map((n, i) => `<dt>구성 ${i + 1}</dt><dd style="font-family:var(--sans)">${esc(n)}</dd>`).join('')}</dl>
+      ${lib.on && !e.model.saved ? '<button class="btn" id="avg-save" type="button" style="margin-top:12px">데이터 목록에 저장</button>' : e.model.saved ? '<div class="check">데이터 목록에 저장됨</div>' : ''}`;
     return;
   }
   const diff = e.model.d50calc && v.D50 ? Math.abs(e.model.d50calc / v.D50 - 1) * 100 : null;
@@ -827,7 +908,7 @@ function renderReadout() {
 const CMP = [['D10', 'D10 (µm)', 2], ['D50', 'D50 (µm)', 2], ['D90', 'D90 (µm)', 2], ['Span', 'Span', 2], ['Mode', 'Mode (µm)', 2], ['Mean', 'Mean (µm)', 2], ['CV', 'CV (%)', 1], ['SSA', '비표면적 (cm²/cm³)', 0]];
 const ISO = { D10: 5, D50: 3, D90: 5 }; // ISO 13320 repeatability guide (CV %), for x50 > 10 µm
 function stats(key) {
-  const v = state.files.map(e => e.model.results[key]).filter(x => x != null && isFinite(x));
+  const v = state.files.filter(e => !isCalc(e)).map(e => e.model.results[key]).filter(x => x != null && isFinite(x));
   if (v.length < 2) return null;
   const m = v.reduce((a, b) => a + b, 0) / v.length, sd = Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1));
   return { m, sd, rsd: m ? sd / m * 100 : null };
@@ -837,9 +918,10 @@ function renderCompare() {
   if (!state.files.length) { t.innerHTML = ''; note.hidden = true; return; }
   let html = `<thead><tr><th>시료</th><th class="l">파일</th><th>측정 일시</th>${CMP.map(c => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>` +
     state.files.map(e => `<tr class="${e.id === state.active ? 'active' : ''}"><td class="txt"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${col(e)}"></span>${esc(label(e))}</td><td class="txt fn" title="${esc(e.name)}">${esc(e.name)}</td><td>${fmtTime(e.model.meta.measTime)}</td>${CMP.map(c => `<td>${f(e.model.results[c[0]], c[2])}</td>`).join('')}</tr>`).join('') + '</tbody>';
-  if (state.files.length >= 2) {
+  const nMeas = state.files.filter(e => !isCalc(e)).length;
+  if (nMeas >= 2) {
     const st = Object.fromEntries(CMP.map(c => [c[0], stats(c[0])]));
-    html += `<tfoot><tr><td class="txt">평균 (n=${state.files.length})</td><td></td><td></td>${CMP.map(c => `<td>${st[c[0]] ? f(st[c[0]].m, c[2]) : '—'}</td>`).join('')}</tr>
+    html += `<tfoot><tr><td class="txt">측정 평균 (n=${nMeas})</td><td></td><td></td>${CMP.map(c => `<td>${st[c[0]] ? f(st[c[0]].m, c[2]) : '—'}</td>`).join('')}</tr>
       <tr><td class="txt">표준편차</td><td></td><td></td>${CMP.map(c => `<td>${st[c[0]] ? f(st[c[0]].sd, c[2] + 1) : '—'}</td>`).join('')}</tr>
       <tr><td class="txt">변동계수 (%)</td><td></td><td></td>${CMP.map(c => { const x = st[c[0]]; if (!x || x.rsd == null) return '<td>—</td>'; const over = ISO[c[0]] && x.rsd > ISO[c[0]]; return `<td class="${over ? 'over' : ''}">${f(x.rsd, 1)}${over ? ' 초과' : ''}</td>`; }).join('')}</tr></tfoot>`;
     note.hidden = false;
@@ -848,7 +930,7 @@ function renderCompare() {
 }
 $('copy-compare').addEventListener('click', ev => {
   const rows = [['시료', '파일', '측정 일시', ...CMP.map(c => c[1])]].concat(state.files.map(e => [label(e), e.name, fmtTime(e.model.meta.measTime), ...CMP.map(c => f(e.model.results[c[0]], c[2]))]));
-  if (state.files.length >= 2) {
+  if (state.files.filter(e => !isCalc(e)).length >= 2) {
     const st = CMP.map(c => stats(c[0]));
     rows.push(['평균', '', '', ...st.map((x, i) => x ? f(x.m, CMP[i][2]) : '')]);
     rows.push(['표준편차', '', '', ...st.map((x, i) => x ? f(x.sd, CMP[i][2] + 1) : '')]);
@@ -856,6 +938,36 @@ $('copy-compare').addEventListener('click', ev => {
   }
   copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '결과 비교 표를 복사했어요');
 });
+
+/* ---------- average record (Mastersizer "Create average result") ---------- */
+// 누적분포를 공통 격자에 옮겨 같은 비중으로 평균 (혼합 예측과 같은 계산, 비율만 1/n)
+function avgDist(dists) {
+  const grid = unionGrid(dists);
+  return toDist(grid, mixQ(dists.map(d => qOnGrid(d, grid)), dists.map(() => 1 / dists.length)));
+}
+function avgModel(sample, dist, members, measTime) {
+  return { kind: 'avg', meta: { sample, measTime }, results: dRes(dist), dist, members, d50calc: null, warnings: [], streams: [] };
+}
+$('avg-make').addEventListener('click', () => {
+  const src = state.files.filter(e => e.model.dist && !isCalc(e));
+  if (src.length < 2) return toast('평균 낼 측정 파일을 2개 이상 열어 주세요');
+  const names = [...new Set(src.map(e => e.model.meta.sample))];
+  const sample = `${names.length === 1 ? names[0] + ' ' : ''}평균 (n=${src.length})`;
+  const t = Math.max(...src.map(e => +(e.model.meta.measTime || 0)));
+  addFile(sample, null, false, avgModel(sample, avgDist(src.map(e => e.model.dist)), src.map(label), t ? new Date(t) : null));
+  toast('평균 기록을 만들었어요. 그래프·표에 함께 보여요');
+});
+$('readout').addEventListener('click', async ev => {
+  if (ev.target.id !== 'avg-save') return;
+  const e = activeFile(); if (!e || e.model.kind !== 'avg') return;
+  const m = e.model, rec = { key: 'avg:' + Date.now().toString(36), sha: null, record: 1, name: '(평균 기록)', sample: m.meta.sample,
+    measTime: m.meta.measTime ? m.meta.measTime.getTime() : null, instrument: '평균', ...pick(m.results, ['D10', 'D50', 'D90', 'Span']),
+    dist: { x: Array.from(m.dist.x), Q: Array.from(m.dist.Q) }, members: m.members, lot: '', memo: '', added: Date.now(), rv: 2 };
+  lib.rows.push(rec);
+  if (!(await libSave())) { lib.rows.pop(); return; }
+  m.saved = true; renderReadout(); renderLib(); toast('평균 기록을 데이터 목록에 저장했어요');
+});
+const pick = (o, ks) => Object.fromEntries(ks.map(k => [k, o[k] ?? null]));
 
 /* ---------- channel table ---------- */
 function renderDist() {
@@ -900,7 +1012,10 @@ function renderRaw() {
 $('raw-search').addEventListener('input', renderRaw);
 
 /* ---------- yield ---------- */
-const MESH = { 25: 500, 38: 400, 45: 325, 53: 270, 63: 230, 75: 200, 90: 170, 106: 140, 125: 120, 150: 100, 180: 80, 212: 70, 250: 60 };
+// ASTM E11 표준 체: [눈금 µm, 체 번호(mesh)]
+const SIEVES = [[2000, 10], [1700, 12], [1400, 14], [1180, 16], [1000, 18], [850, 20], [710, 25], [600, 30], [500, 35], [425, 40], [355, 45], [300, 50], [250, 60],
+  [212, 70], [180, 80], [150, 100], [125, 120], [106, 140], [90, 170], [75, 200], [63, 230], [53, 270], [45, 325], [38, 400], [32, 450], [25, 500], [20, 635]];
+const MESH = Object.fromEntries(SIEVES);
 state.cuts = [53]; state.mass = null;
 try { const c = localStorage.getItem('ngb.cuts'); if (c) { $('cuts').value = c; } } catch (e) {}
 state.cuts = parseCuts($('cuts').value);
@@ -942,9 +1057,10 @@ function renderYield() {
   const rows = files.map(e => ({ e, fr: fractions(e.model.dist, state.cuts) }));
   let html = `<thead><tr><th>시료</th>${labs.map(l => `<th><span class="yhead">${esc(l.t)}<span class="mesh">${esc(l.s)}</span></span></th>`).join('')}</tr></thead><tbody>` +
     rows.map(r => `<tr class="${r.e.id === state.active ? 'active' : ''}"><td class="txt"><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${col(r.e)}"></span>${esc(label(r.e))}</td>${r.fr.map(v => `<td>${f(v, 2)} %${state.mass ? `<span class="kg">${fkg(kg(v))} kg</span>` : ''}</td>`).join('')}</tr>`).join('') + '</tbody>';
-  if (rows.length >= 2) {
-    const st = labs.map((_, i) => { const v = rows.map(r => r.fr[i]); const m = v.reduce((a, b) => a + b, 0) / v.length; return { m, sd: Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1)) }; });
-    html += `<tfoot><tr><td class="txt">평균 (n=${rows.length})</td>${st.map(x => `<td>${f(x.m, 2)} %${state.mass ? `<span class="kg">${fkg(kg(x.m))} kg</span>` : ''}</td>`).join('')}</tr><tr><td class="txt">표준편차</td>${st.map(x => `<td>${f(x.sd, 2)} %p</td>`).join('')}</tr></tfoot>`;
+  const meas = rows.filter(r => !isCalc(r.e));
+  if (meas.length >= 2) {
+    const st = labs.map((_, i) => { const v = meas.map(r => r.fr[i]); const m = v.reduce((a, b) => a + b, 0) / v.length; return { m, sd: Math.sqrt(v.reduce((a, b) => a + (b - m) ** 2, 0) / (v.length - 1)) }; });
+    html += `<tfoot><tr><td class="txt">측정 평균 (n=${meas.length})</td>${st.map(x => `<td>${f(x.m, 2)} %${state.mass ? `<span class="kg">${fkg(kg(x.m))} kg</span>` : ''}</td>`).join('')}</tr><tr><td class="txt">표준편차</td>${st.map(x => `<td>${f(x.sd, 2)} %p</td>`).join('')}</tr></tfoot>`;
   }
   const xs = act.model.dist.x, out = state.cuts.filter(c => c < xs[0] || c > xs.at(-1));
   t.innerHTML = html;
@@ -969,6 +1085,95 @@ $('copy-yield').addEventListener('click', ev => {
   if (state.mass) rows.unshift([`투입량 ${state.mass} kg`]);
   copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '수율 표를 복사했어요');
 });
+
+/* ---------- standard sieve table ---------- */
+// 체마다 [통과 %, 체 위 %]. 체 위 = 바로 위 체 통과 − 이 체 통과 (맨 위 체는 100 − 통과)
+function sieveTable(dist, sieves) {
+  const end = dist.Q[dist.Q.length - 1] || 100, pass = sieves.map(([d]) => underAt(dist, d) * 100 / end);
+  return pass.map((p, i) => [p, (i ? pass[i - 1] : 100) - p]);
+}
+function sieveRows() {
+  const files = state.files.filter(e => e.model.dist);
+  if (!files.length) return null;
+  // 모든 파일이 100% 통과하거나 0%인 체는 빼고, 범위 위로 한 개는 남김
+  const all = files.map(e => sieveTable(e.model.dist, SIEVES));
+  const live = SIEVES.map((_, i) => all.some(t => t[i][0] < 99.95 && t[i][0] > 0.05));
+  const first = live.indexOf(true), last = live.lastIndexOf(true);
+  if (first < 0) return null;
+  const lo = Math.max(0, first - 1), idx = SIEVES.slice(lo, last + 1).map((_, k) => lo + k);
+  const sv = idx.map(i => SIEVES[i]);
+  return { files, sv, tab: files.map(e => sieveTable(e.model.dist, sv)) };
+}
+function renderSieve() {
+  const t = $('sieve'), s = sieveRows();
+  if (!s) { t.innerHTML = '<tbody><tr><td class="txt" style="text-align:left;color:var(--ink-3)">표시할 입도분포가 없어요.</td></tr></tbody>'; return; }
+  t.innerHTML = `<thead><tr><th>체 번호</th><th>눈금 (µm)</th>${s.files.map(e => `<th>${esc(label(e))} 통과 (%)</th><th>체 위 (%)</th>`).join('')}</tr></thead><tbody>` +
+    s.sv.map(([d, m], i) => `<tr><td>${m} mesh</td><td>${d}</td>${s.tab.map(tb => `<td>${f(tb[i][0])}</td><td>${f(tb[i][1])}</td>`).join('')}</tr>`).join('') +
+    `<tr><td class="txt">받침 (pan)</td><td>&lt; ${s.sv.at(-1)[0]}</td>${s.tab.map(tb => `<td></td><td>${f(tb.at(-1)[0])}</td>`).join('')}</tr></tbody>`;
+}
+$('copy-sieve').addEventListener('click', ev => {
+  const s = sieveRows(); if (!s) return;
+  const rows = [['체 번호', '눈금 (µm)', ...s.files.flatMap(e => [`${label(e)} 통과 (%)`, `${label(e)} 체 위 (%)`])]]
+    .concat(s.sv.map(([d, m], i) => [`${m} mesh`, d, ...s.tab.flatMap(tb => [f(tb[i][0]), f(tb[i][1])])]))
+    .concat([['받침 (pan)', `< ${s.sv.at(-1)[0]}`, ...s.tab.flatMap(tb => ['', f(tb.at(-1)[0])])]]);
+  copyText(rows.map(r => r.join('\t')).join('\n'), ev.currentTarget, '체 표를 복사했어요');
+});
+
+/* ---------- small line chart (signals, trend) ---------- */
+function niceTicks(lo, hi, n = 5) {
+  const step = niceMax((hi - lo) / n || 1), t = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-6; v += step) t.push(+v.toPrecision(10));
+  return t;
+}
+// o = { series: [{ name, color, pts: [[x, y, tip]], dash, dots, noLine }], xlab, ylab, logY, logMin, xTime, yZero, w, h }
+function lineSvg(o) {
+  const w = o.w || 560, h = o.h || 270, ml = 58, mr = 12, mt = 28, mb = 40, pw = w - ml - mr, ph = h - mt - mb;
+  const ok = p => isFinite(p[0]) && p[1] != null && isFinite(p[1]) && (!o.logY || p[1] > 0);
+  const pts = o.series.flatMap(s => s.pts.filter(ok));
+  if (!pts.length) return '<p class="note">표시할 값이 없어요.</p>';
+  let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0]));
+  if (x0 === x1) { const pad = o.xTime ? 864e5 : 1; x0 -= pad; x1 += pad; }
+  const ty = v => o.logY ? Math.log10(Math.max(v, o.logMin || 0)) : v; // logMin 아래 값은 바닥에 붙임
+  let y0 = Math.min(...pts.map(p => ty(p[1]))), y1 = Math.max(...pts.map(p => ty(p[1])));
+  if (o.logY) { y0 = Math.floor(y0); y1 = Math.max(y0 + 1, Math.ceil(y1)); }
+  else { if (o.yZero) y0 = Math.min(0, y0); const pad = (y1 - y0) * 0.08 || Math.abs(y1) * 0.1 || 1; y1 += pad; if (!o.yZero) y0 -= pad; }
+  const X = v => ml + (v - x0) / (x1 - x0) * pw, Y = v => mt + ph - (ty(v) - y0) / (y1 - y0) * ph;
+  let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(o.ylab)} 그래프" font-family="var(--sans)" font-size="11">`;
+  const yt = o.logY ? Array.from({ length: y1 - y0 + 1 }, (_, i) => 10 ** (y0 + i)) : niceTicks(y0, y1);
+  yt.forEach(v => { const yy = Y(v).toFixed(1); s += `<line x1="${ml}" x2="${w - mr}" y1="${yy}" y2="${yy}" stroke="var(--grid)"/><text x="${ml - 6}" y="${+yy + 4}" text-anchor="end" fill="var(--ink-2)" class="num">${o.logY ? (v >= 1e4 || v < 0.01 ? v.toExponential(0) : +v.toPrecision(3)) : +v.toPrecision(4)}</text>`; });
+  const xt = o.xTime ? Array.from({ length: 5 }, (_, i) => x0 + (x1 - x0) * i / 4) : niceTicks(x0, x1, 6);
+  const dfmt = v => { const d = new Date(v); return x1 - x0 < 2 * 864e5 ? `${pad2(d.getMonth() + 1)}/${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}` : `${String(d.getFullYear()).slice(2)}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+  xt.forEach(v => { const xx = X(v).toFixed(1); s += `<line x1="${xx}" x2="${xx}" y1="${mt}" y2="${mt + ph}" stroke="var(--grid)" stroke-width=".6"/><text x="${xx}" y="${mt + ph + 16}" text-anchor="middle" fill="var(--ink-2)" class="num">${o.xTime ? dfmt(v) : +v.toPrecision(4)}</text>`; });
+  s += `<line x1="${ml}" x2="${w - mr}" y1="${mt + ph}" y2="${mt + ph}" stroke="var(--ink-3)"/>`;
+  s += `<text x="${(ml + w - mr) / 2}" y="${h - 4}" text-anchor="middle" fill="var(--ink-2)">${esc(o.xlab)}</text>`;
+  s += `<text x="12" y="${mt + ph / 2}" transform="rotate(-90 12 ${mt + ph / 2})" text-anchor="middle" fill="var(--ink-2)">${esc(o.ylab)}</text>`;
+  let lx = ml;
+  o.series.forEach(se => {
+    const p = se.pts.filter(ok);
+    if (!se.noLine && p.length > 1) s += `<polyline points="${p.map(q => `${X(q[0]).toFixed(1)},${Y(q[1]).toFixed(1)}`).join(' ')}" fill="none" stroke="${se.color}" stroke-width="1.75" stroke-linejoin="round"${se.dash ? ' stroke-dasharray="5 4"' : ''}/>`;
+    if (se.dots) p.forEach(q => { s += `<circle cx="${X(q[0]).toFixed(1)}" cy="${Y(q[1]).toFixed(1)}" r="3" fill="var(--surface)" stroke="${se.color}" stroke-width="1.5"><title>${esc(q[2] || '')}</title></circle>`; });
+    s += `<rect x="${lx}" y="8" width="10" height="10" rx="2" fill="${se.color}"/><text x="${lx + 14}" y="17" fill="var(--ink)">${esc(se.name)}</text>`;
+    lx += 26 + se.name.length * 9;
+  });
+  return `<div class="lsvg">${s}</svg></div>`;
+}
+
+/* ---------- Mastersizer detector signals ---------- */
+function renderSig() {
+  const e = activeFile(), sg = e && e.model.signal, panel = $('sig-panel');
+  panel.hidden = !sg; if (!sg) return;
+  $('sig-name').textContent = label(e);
+  const det = (v, from = 1) => (v || []).slice(from).map((y, i) => [i + from, y, `검출기 ${i + from}: ${+y.toPrecision(5)}`]);
+  $('sig-raw').innerHTML = lineSvg({ xlab: '검출기 번호', ylab: '신호 (로그)', logY: true, logMin: 0.1, series: [
+    { name: '배경', color: 'var(--ink-3)', pts: det(sg.bg), dots: true },
+    { name: '시료 원신호', color: col(e), pts: det(sg.raw), dots: true }] });
+  // 0x73[1..n] ↔ 0x79[0..n-1]
+  $('sig-fit').innerHTML = sg.fit && sg.corr ? lineSvg({ xlab: '검출기 번호', ylab: '빛 에너지', yZero: true, series: [
+    { name: '실측', color: col(e), pts: det(sg.corr.slice(0, sg.fit.length + 1)), dots: true, noLine: true },
+    { name: '계산 (피팅)', color: 'var(--ink)', pts: sg.fit.map((y, i) => [i + 1, y, `검출기 ${i + 1} 계산: ${+y.toPrecision(5)}`]) }] }) +
+    `<p class="note" style="margin:6px 0 0">장비가 계산한 잔차 ${f(e.model.results.Residual, 3)} % (가중 ${f(e.model.results.WResidual, 3)} %). 설명서 기준 1% 아래면 피팅이 좋은 편이에요.</p>`
+    : '<p class="note">이 기록에는 피팅 신호가 없어요.</p>';
+}
 
 /* ---------- mix prediction ---------- */
 // 부피 기준 누적분포는 부피 분율로 그대로 더해진다: Q_mix(d) = Σ v_k · Q_k(d)
@@ -1176,6 +1381,18 @@ function copyText(text, btn, okMsg) {
   try { navigator.clipboard.writeText(text).then(() => toast(okMsg), fallback); } catch (err) { fallback(); }
 }
 
+/* ---------- print report ---------- */
+// 인쇄는 늘 밝은 색, 머리말에 날짜·개발자. 프린터에서 "Microsoft Print to PDF"를 고르면 PDF 보고서가 됨
+window.addEventListener('beforeprint', () => {
+  document.documentElement.dataset.theme = 'light';
+  $('print-head').innerHTML = `<h1>입도 분석 보고서</h1><p>출력 ${fmtTime(new Date())} · 측정 ${state.files.filter(e => !isCalc(e)).length}건 · PSA 입도 뷰어 v${esc(APP_VERSION)} · Developed by ${esc(APP_AUTHOR)}</p>`;
+});
+window.addEventListener('afterprint', () => { delete document.documentElement.dataset.theme; });
+$('print').addEventListener('click', () => {
+  if (!state.files.length) return toast('먼저 측정 파일을 열어 주세요');
+  window.print();
+});
+
 $('file-input').addEventListener('change', ev => { readFiles([...ev.target.files]); ev.target.value = ''; });
 let dragDepth = 0;
 window.addEventListener('dragenter', ev => { if ([...(ev.dataTransfer?.types || [])].includes('Files')) { dragDepth++; $('drop').hidden = false; } });
@@ -1188,13 +1405,56 @@ const lib = { on: false, rows: [], q: '', sel: new Set() };
 const api = () => window.pywebview.api;
 function b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); }
 function unb64(s) { const bin = atob(s), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; }
+// rv 2: 목록 열 고르기용 항목(D[4,3]·차폐율·SOP 등)을 함께 저장. 예전 기록은 libUpgrade가 원본에서 채움
+const recExtra = m => ({ ...pick(m.results, ['D43', 'D32', 'Mode', 'Uniformity', 'Obs', 'Residual']),
+  material: m.meta.material || '', dispersant: m.meta.dispersant || '', sop: m.meta.sop || '', operator: m.meta.operator || '', rv: 2 });
 function toRecord(sha, file, m) {
   const r = m.results, d = m.dist;
   return { key: `${sha}:${m.record || 1}`, sha, record: m.record || 1, name: recName(file, m), sample: m.meta.sample,
     measTime: m.meta.measTime ? m.meta.measTime.getTime() : null,
     instrument: m.kind === 'mea' ? 'Mastersizer 2000' : (m.meta.model || 'LA-960'),
     D10: r.D10, D50: r.D50, D90: r.D90, Span: r.Span,
-    dist: d ? { x: Array.from(d.x), Q: Array.from(d.Q) } : null, lot: '', memo: '', added: Date.now() };
+    dist: d ? { x: Array.from(d.x), Q: Array.from(d.Q) } : null, lot: '', memo: '', added: Date.now(), ...recExtra(m) };
+}
+async function libUpgrade() {
+  const old = lib.rows.filter(r => r.rv !== 2);
+  if (!old.length) return;
+  let n = 0;
+  for (const sha of [...new Set(old.filter(r => r.sha).map(r => r.sha))]) {
+    let ms = [];
+    try {
+      const s = await api().read_original(sha); if (!s) continue;
+      const u8 = unb64(s), any = old.find(r => r.sha === sha);
+      ms = /\.mea\b/i.test(any.name) ? parseMEA(u8) : [parseNGB(u8, CFB)];
+    } catch (e) { continue; }
+    old.filter(r => r.sha === sha).forEach(r => { const m = ms.find(x => (x.record || 1) === r.record); if (m) { Object.assign(r, recExtra(m)); n++; } });
+  }
+  old.filter(r => !r.sha).forEach(r => (r.rv = 2));
+  if (n && await libSave()) { renderLib(); toast(`예전 기록 ${n}건에 새 항목(D[4,3]·차폐율 등)을 채웠어요`); }
+}
+
+/* 목록 열: [키, 머리글, 종류(time·txt·edit) 또는 소수 자릿수]. 'yield'는 수율 기준 입경만큼 펼쳐짐 */
+const LIB_COLS = [['measTime', '측정 일시', 'time'], ['sample', '시료', 'txt'], ['lot', '로트', 'edit'], ['memo', '메모', 'edit'],
+  ['D10', 'D10', 2], ['D50', 'D50', 2], ['D90', 'D90', 2], ['Span', 'Span', 3], ['D43', 'D[4,3]', 2], ['D32', 'D[3,2]', 2], ['Mode', 'Mode', 2],
+  ['Uniformity', '균일도', 3], ['Obs', '차폐율 (%)', 2], ['Residual', '잔차 (%)', 3], ['yield', '수율 (%)', 2],
+  ['material', '물질', 'txt'], ['dispersant', '분산매', 'txt'], ['sop', 'SOP', 'txt'], ['operator', '작업자', 'txt'], ['instrument', '장비', 'txt'], ['name', '파일', 'txt']];
+lib.cols = new Set(['measTime', 'sample', 'lot', 'memo', 'D10', 'D50', 'D90', 'Span', 'yield', 'instrument', 'name']);
+try { const c = JSON.parse(localStorage.getItem('psa.libcols')); if (Array.isArray(c) && c.length) lib.cols = new Set(c); } catch (e) {}
+lib.sort = { k: 'measTime', dir: -1 }; lib.conds = [];
+// 실제 열 목록 (수율은 구간마다 한 열)
+function libCols() {
+  return LIB_COLS.filter(c => lib.cols.has(c[0])).flatMap(c => c[0] !== 'yield' ? [{ k: c[0], t: c[1], kind: c[2] }]
+    : (state.cuts.length ? intervalLabels(state.cuts) : []).map((l, i) => ({ k: 'y' + i, t: `${l.t} (%)`, kind: 2 })));
+}
+function colVal(r, k) {
+  if (/^y\d$/.test(k)) return libYields(r)[+k.slice(1)];
+  return r[k] ?? null;
+}
+const condCols = () => [['measTime', '측정 일시 (예: 2026-11-01)']].concat(LIB_COLS.filter(c => typeof c[2] === 'number' && c[0] !== 'yield').map(c => [c[0], c[1]]),
+  (state.cuts.length ? intervalLabels(state.cuts) : []).map((l, i) => ['y' + i, `수율 ${l.t} (%)`]));
+function condPass(r, c) {
+  const v = colVal(r, c.k); if (v == null || !isFinite(v)) return false;
+  return c.op === 'ge' ? v >= c.v : v <= c.v;
 }
 async function libSave() {
   try { await api().lib_save(JSON.stringify(lib.rows)); return true; }
@@ -1215,23 +1475,80 @@ async function libAdd(items) {
   if (n && await libSave()) toast(`데이터 목록에 ${n}건 저장했어요`);
 }
 function libFiltered() {
-  const q = lib.q.trim().toLowerCase();
-  return lib.rows.filter(r => !q || [r.sample, r.lot, r.memo, r.name, r.instrument].join(' ').toLowerCase().includes(q))
-    .sort((a, b) => (b.measTime || 0) - (a.measTime || 0));
+  const q = lib.q.trim().toLowerCase(), { k, dir } = lib.sort;
+  const key = r => colVal(r, k);
+  return lib.rows.filter(r => (!q || [r.sample, r.lot, r.memo, r.name, r.instrument, r.material, r.sop, r.operator].join(' ').toLowerCase().includes(q)) && lib.conds.every(c => condPass(r, c)))
+    .sort((a, b) => { const x = key(a), y = key(b);
+      if (x == null || x === '') return 1; if (y == null || y === '') return -1; // 빈 값은 늘 아래로
+      return dir * (typeof x === 'number' && typeof y === 'number' ? x - y : natural(String(x), String(y))); });
 }
 const libYields = r => !state.cuts.length ? [] : r.dist ? fractions(r.dist, state.cuts) : intervalLabels(state.cuts).map(() => null);
 function renderLib() {
   if (!lib.on) return;
   const rows = libFiltered(), labs = state.cuts.length ? intervalLabels(state.cuts) : [];
   $('lib-count').textContent = `${rows.length === lib.rows.length ? '' : rows.length + ' / '}${lib.rows.length}건${lib.sel.size ? ` · ${lib.sel.size}건 선택` : ''}`;
+  renderLibTools(); renderTrend(rows);
   if (!lib.rows.length) { $('lib').innerHTML = '<tbody><tr><td class="txt" style="text-align:left;color:var(--ink-3)">아직 저장된 데이터가 없어요. .ngb · .mea 파일을 열면 여기에 쌓여요.</td></tr></tbody>'; return; }
-  const all = rows.length > 0 && rows.every(r => lib.sel.has(r.key));
-  $('lib').innerHTML = `<thead><tr><th class="l"><input type="checkbox" id="lib-all" ${all ? 'checked' : ''} aria-label="보이는 항목 모두 선택"></th><th class="l">측정 일시</th><th class="l">시료</th><th class="l">로트</th><th class="l">메모</th><th>D10</th><th>D50</th><th>D90</th><th>Span</th>${labs.map(l => `<th>${esc(l.t)} (%)</th>`).join('')}<th class="l">장비</th><th class="l">파일</th></tr></thead><tbody>` +
-    rows.map(r => `<tr data-key="${esc(r.key)}"><td class="txt"><input type="checkbox" data-sel ${lib.sel.has(r.key) ? 'checked' : ''} aria-label="${esc(r.sample)} 선택"></td><td>${fmtTime(r.measTime ? new Date(r.measTime) : null)}</td><td class="txt">${esc(r.sample)}</td><td class="txt"><input class="cell" data-f="lot" value="${esc(r.lot || '')}" aria-label="로트" placeholder="—"></td><td class="txt"><input class="cell wide" data-f="memo" value="${esc(r.memo || '')}" aria-label="메모" placeholder="—"></td><td>${f(r.D10)}</td><td>${f(r.D50)}</td><td>${f(r.D90)}</td><td>${f(r.Span)}</td>${libYields(r).map(v => `<td>${f(v, 2)}</td>`).join('')}<td class="txt">${esc(r.instrument)}</td><td class="txt fn" title="${esc(r.name)}">${esc(r.name)}</td></tr>`).join('') + '</tbody>';
+  const all = rows.length > 0 && rows.every(r => lib.sel.has(r.key)), cols = libCols();
+  const cell = (r, c) => {
+    if (c.kind === 'edit') return `<td class="txt"><input class="cell${c.k === 'memo' ? ' wide' : ''}" data-f="${c.k}" value="${esc(r[c.k] || '')}" aria-label="${c.t}" placeholder="—"></td>`;
+    if (c.kind === 'time') return `<td>${fmtTime(r.measTime ? new Date(r.measTime) : null)}</td>`;
+    if (c.kind === 'txt') return c.k === 'name' ? `<td class="txt fn" title="${esc(r.name)}">${esc(r.name)}</td>` : `<td class="txt">${esc(r[c.k] ?? '')}</td>`;
+    return `<td>${f(colVal(r, c.k), c.kind)}</td>`;
+  };
+  const arrow = k => lib.sort.k === k ? (lib.sort.dir > 0 ? ' ▲' : ' ▼') : '';
+  $('lib').innerHTML = `<thead><tr><th class="l"><input type="checkbox" id="lib-all" ${all ? 'checked' : ''} aria-label="보이는 항목 모두 선택"></th>${cols.map(c => `<th class="sort${typeof c.kind === 'number' ? '' : ' l'}" data-sort="${c.k}">${esc(c.t)}${arrow(c.k)}</th>`).join('')}</tr></thead><tbody>` +
+    rows.map(r => `<tr data-key="${esc(r.key)}"><td class="txt"><input type="checkbox" data-sel ${lib.sel.has(r.key) ? 'checked' : ''} aria-label="${esc(r.sample)} 선택"></td>${cols.map(c => cell(r, c)).join('')}</tr>`).join('') + '</tbody>';
 }
+function renderLibTools() {
+  const cc = condCols(), k = $('cond-k').value;
+  $('cond-k').innerHTML = cc.map(c => `<option value="${c[0]}"${c[0] === k ? ' selected' : ''}>${esc(c[1])}</option>`).join('');
+  const name = key => (cc.find(c => c[0] === key) || [, key])[1].replace(/ \(예:.*\)/, '');
+  $('cond-list').innerHTML = lib.conds.map((c, i) => `<button class="preset" type="button" aria-pressed="true" data-ci="${i}" title="눌러서 조건 지우기">${esc(name(c.k))} ${c.op === 'ge' ? '≥' : '≤'} ${esc(c.label)} ×</button>`).join('');
+  $('lib-cols').innerHTML = LIB_COLS.map(c => `<label class="preset"><input type="checkbox" data-col="${c[0]}" ${lib.cols.has(c[0]) ? 'checked' : ''}>${esc(c[1])}</label>`).join('');
+  const tk = $('trend-k').value || 'D';
+  $('trend-k').innerHTML = [['D', 'D10 · D50 · D90']].concat(cc.slice(1)).map(c => `<option value="${c[0]}"${c[0] === tk ? ' selected' : ''}>${esc(c[1])}</option>`).join('');
+}
+function renderTrend(rows) {
+  const k = $('trend-k').value || 'D', pts = [...rows].filter(r => r.measTime).sort((a, b) => a.measTime - b.measTime);
+  const tip = (r, nm, v) => `${r.sample} · ${fmtTime(new Date(r.measTime))} · ${nm} ${f(v)}`;
+  const ser = (kk, nm, color) => ({ name: nm, color, dots: true, pts: pts.map(r => [r.measTime, colVal(r, kk), tip(r, nm, colVal(r, kk))]) });
+  const nm = (condCols().find(c => c[0] === k) || [, k])[1];
+  $('trend').innerHTML = pts.length < 2 ? '<p class="note">측정 일시가 있는 기록이 2건 이상 보이면 그려져요.</p>' :
+    lineSvg({ xTime: true, w: 1000, h: 300, xlab: '측정 일시', ylab: k === 'D' ? '입경 (µm)' : nm,
+      series: k === 'D' ? [ser('D10', 'D10', 'var(--s3)'), ser('D50', 'D50', 'var(--s1)'), ser('D90', 'D90', 'var(--s2)')] : [ser(k, nm, 'var(--s1)')] }) +
+    `<p class="note" style="margin:6px 0 0">${pts.length}건 · 점에 마우스를 올리면 시료 이름과 값이 보여요.</p>`;
+}
+$('trend-k').addEventListener('change', () => renderTrend(libFiltered()));
+$('lib-cols').addEventListener('change', ev => {
+  const k = ev.target.dataset.col; if (!k) return;
+  ev.target.checked ? lib.cols.add(k) : lib.cols.delete(k);
+  try { localStorage.setItem('psa.libcols', JSON.stringify([...lib.cols])); } catch (e) {}
+  renderLib();
+});
+$('cond-btn').addEventListener('click', () => {
+  const k = $('cond-k').value, op = $('cond-op').value, raw = $('cond-v').value.trim();
+  let v;
+  if (k === 'measTime') {
+    const m = raw.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
+    if (!m) return toast('날짜는 2026-11-01처럼 넣어 주세요');
+    v = new Date(+m[1], m[2] - 1, +m[3] + (op === 'le' ? 1 : 0)).getTime() - (op === 'le' ? 1 : 0); // 이하는 그날 끝까지
+  } else { v = parseFloat(raw); if (!isFinite(v)) return toast('값에 숫자를 넣어 주세요'); }
+  lib.conds.push({ k, op, v, label: raw }); $('cond-v').value = ''; renderLib();
+});
+$('cond-v').addEventListener('keydown', ev => { if (ev.key === 'Enter') $('cond-btn').click(); });
+$('cond-list').addEventListener('click', ev => {
+  const b = ev.target.closest('[data-ci]'); if (!b) return;
+  lib.conds.splice(+b.dataset.ci, 1); renderLib();
+});
 async function openRecords(refs, replace) {
   const batch = [], cache = {};
   for (const ref of refs) {
+    if (!ref.sha && ref.dist) { // 저장한 평균 기록: 원본 파일 없이 분포만 있음
+      const d = toDist(ref.dist.x, ref.dist.Q);
+      batch.push({ name: ref.sample, model: Object.assign(avgModel(ref.sample, d, ref.members || [], ref.measTime ? new Date(ref.measTime) : null), { saved: true }) });
+      continue;
+    }
     if (!(ref.sha in cache)) { try { const s = await api().read_original(ref.sha); cache[ref.sha] = s ? unb64(s) : null; } catch (e) { cache[ref.sha] = null; } }
     const u8 = cache[ref.sha];
     if (!u8) { toast(`${ref.name}: 원본 사본을 찾지 못했어요`); continue; }
@@ -1251,6 +1568,12 @@ $('lib').addEventListener('change', async ev => {
   if (ev.target.matches('[data-sel]')) { ev.target.checked ? lib.sel.add(r.key) : lib.sel.delete(r.key); renderLib(); return; }
   if (ev.target.dataset.f) { r[ev.target.dataset.f] = ev.target.value.trim(); if (await libSave()) toast('저장했어요'); }
 });
+$('lib').addEventListener('click', ev => {
+  const th = ev.target.closest('th[data-sort]'); if (!th) return;
+  const k = th.dataset.sort;
+  lib.sort = { k, dir: lib.sort.k === k ? -lib.sort.dir : (k === 'measTime' ? -1 : 1) };
+  renderLib();
+});
 $('lib').addEventListener('keydown', ev => { if (ev.key === 'Enter' && ev.target.matches('input.cell')) ev.target.blur(); });
 $('lib').addEventListener('dblclick', ev => {
   if (ev.target.matches('input')) return;
@@ -1269,16 +1592,16 @@ $('lib-del').addEventListener('click', async () => {
   if (!confirm(`선택한 ${gone.length}건을 데이터 목록에서 지울까요?\n보관한 원본 사본도 함께 지워지고 되돌릴 수 없어요.`)) return;
   lib.rows = lib.rows.filter(r => !lib.sel.has(r.key)); lib.sel.clear();
   if (!(await libSave())) return;
-  const shas = [...new Set(gone.map(r => r.sha))].filter(s => !lib.rows.some(r => r.sha === s));
+  const shas = [...new Set(gone.map(r => r.sha))].filter(s => s && !lib.rows.some(r => r.sha === s));
   if (shas.length) await api().delete_originals(shas);
   renderLib(); toast(`${gone.length}건 지웠어요`);
 });
 $('lib-csv').addEventListener('click', async () => {
   const rows = libFiltered(); if (!rows.length) return toast('내보낼 데이터가 없어요');
-  const labs = state.cuts.length ? intervalLabels(state.cuts) : [];
+  const cols = libCols();
   const q = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-  const out = [['측정 일시', '시료', '로트', '메모', 'D10 (µm)', 'D50 (µm)', 'D90 (µm)', 'Span', ...labs.map(l => `${l.t} (%)`), '장비', '파일']]
-    .concat(rows.map(r => [fmtTime(r.measTime ? new Date(r.measTime) : null), r.sample, r.lot, r.memo, f(r.D10), f(r.D50), f(r.D90), f(r.Span), ...libYields(r).map(v => f(v, 2)), r.instrument, r.name]));
+  const out = [cols.map(c => c.t)].concat(rows.map(r => cols.map(c => c.kind === 'time' ? fmtTime(r.measTime ? new Date(r.measTime) : null)
+    : typeof c.kind === 'number' ? (colVal(r, c.k) == null ? '' : f(colVal(r, c.k), c.kind)) : r[c.k] ?? '')));
   try { const n = await api().save_text('PSA_데이터목록.csv', out.map(r => r.map(q).join(',')).join('\r\n')); if (n) toast(`${n} 저장했어요`); }
   catch (e) { toast('CSV를 저장하지 못했어요: ' + (e.message || e)); }
 });
@@ -1315,6 +1638,7 @@ async function libInit() {
   try { const c = JSON.parse(await api().lib_load('calib')); if (Array.isArray(c)) calib.rows = c; }
   catch (e) { calib.broken = true; toast('보정 기록(calib.json)을 읽지 못했어요. 저장 폴더의 calib.json.bak으로 복구할 수 있어요.'); }
   renderLib(); refreshMix(); renderMix();
+  libUpgrade();
 }
 window.addEventListener('pywebviewready', libInit);
 

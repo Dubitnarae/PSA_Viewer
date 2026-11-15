@@ -38,5 +38,6 @@ for (const named of [false, true]) {
   assert(ms[1].warnings.some(w => w.includes('차폐율')), 'dry obscuration > 6% warns');
   assert(!ms[0].warnings.some(w => w.includes('차폐율')));
   assert(ms[0].warnings.some(w => w.includes('같은 측정 원자료')), 'same raw sample vector is flagged');
+  assert.deepStrictEqual(ms[0].signal.raw, [1, 2, 3], 'raw detector signal kept for the signal chart');
 }
 console.log('test_mea: OK');
