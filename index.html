@@ -1628,8 +1628,14 @@ $('proj-open').addEventListener('click', async () => {
   $('mass').value = proj.mass || ''; state.mass = proj.mass > 0 ? proj.mass : null;
   await openRecords(proj.files, true);
 });
-async function libInit() {
-  if (lib.on || !(window.pywebview && window.pywebview.api && window.pywebview.api.lib_load)) return;
+// 시작 때 두 경로(boot·pywebviewready)에서 불려도 한 번만 실행
+let libInitP = null;
+function libInit() {
+  if (!(window.pywebview && window.pywebview.api && window.pywebview.api.lib_load)) return Promise.resolve();
+  return libInitP || (libInitP = libInitOnce());
+}
+async function libInitOnce() {
+  if (lib.on) return;
   try { lib.rows = JSON.parse(await api().lib_load()); if (!Array.isArray(lib.rows)) throw 0; }
   catch (e) { $('warns').innerHTML = '<div class="warn">데이터 목록(library.json)을 읽지 못해 저장 기능을 껐어요. 저장 폴더의 library.json.bak으로 복구할 수 있어요.</div>'; return; }
   lib.on = true; // 읽기에 성공했을 때만 켠다 — 실패한 채 저장하면 기존 목록을 빈 목록으로 덮어쓰게 됨
@@ -1640,7 +1646,15 @@ async function libInit() {
   renderLib(); refreshMix(); renderMix();
   libUpgrade();
 }
-window.addEventListener('pywebviewready', libInit);
+// 더블클릭으로 연 파일·이미 떠 있는 창으로 넘어온 파일을 가져와 염 (목록 저장이 켜진 뒤에 열어야 데이터 목록에도 쌓임)
+async function openStartup() {
+  if (!(window.pywebview && window.pywebview.api && window.pywebview.api.take_files)) return;
+  await libInit();
+  let list = [];
+  try { list = await api().take_files(); } catch (e) { return toast('파일을 열지 못했어요: ' + (e.message || e)); }
+  if (list.length) readFiles(list.map(x => new File([unb64(x.b64)], x.name)));
+}
+window.addEventListener('pywebviewready', openStartup);
 
 function boot() {
   if (typeof CFB === 'undefined') { $('warns').innerHTML = '<div class="warn">파일 해석 라이브러리를 불러오지 못했어요. 인터넷 연결을 확인하고 페이지를 새로 고쳐 주세요.</div>'; return; }
@@ -1650,7 +1664,7 @@ function boot() {
   addFile('260611_6 (iron).ngb', unb64(SAMPLE_B64), true);
 }
 boot();
-libInit();
+openStartup();
 let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(renderChart, 150); });
 </script>
 

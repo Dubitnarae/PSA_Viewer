@@ -1,6 +1,7 @@
 """저장 기능 (exe 창에서 화면 JS가 window.pywebview.api.* 로 부른다).
 
-저장 폴더(기본: 프로그램 폴더\\PSA_Data, 위치는 psa_viewer_settings.json에 기록)
+저장 폴더(기본: 문서\\PSA_Data — 설치 폴더는 업데이트 때 바뀌므로 데이터를 두지 않는다. 개발 실행은 소스 폴더\\PSA_Data.
+위치를 바꾸면 프로그램 폴더의 psa_viewer_settings.json에 기록)
 - originals\\<sha256>.<확장자> : 측정 원본 사본. 같은 파일은 한 번만 저장된다.
 - library.json               : 데이터 목록(결과값·누적분포·로트·메모). 덮어쓰기 전 library.json.bak 보관.
 - calib.json                 : 혼합 예측 보정 기록(묶음별 실측−예측 누적 차이). 덮어쓰기 전 calib.json.bak 보관.
@@ -14,12 +15,31 @@ import os
 import re
 import shutil
 import sys
+import threading
 from pathlib import Path
 
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 SETTINGS = APP_DIR / "psa_viewer_settings.json"
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 DOCS = {"library": "library.json", "calib": "calib.json"}  # JS가 고를 수 있는 목록 파일 (그 밖의 이름은 KeyError)
+OPENABLE = (".ngb", ".mea")
+
+
+def docs_dir() -> Path:
+    """실제 '문서' 폴더 (OneDrive 등으로 옮겨져 있어도 맞게 찾음)."""
+    try:
+        import ctypes
+
+        buf = ctypes.create_unicode_buffer(260)
+        if ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf) == 0 and buf.value:  # 5 = CSIDL_PERSONAL
+            return Path(buf.value)
+    except (AttributeError, OSError):
+        pass
+    return Path.home() / "Documents"
+
+
+def default_data_dir() -> Path:
+    return docs_dir() / "PSA_Data" if getattr(sys, "frozen", False) else APP_DIR / "PSA_Data"
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
@@ -33,6 +53,8 @@ class Api:
     def __init__(self, base: Path | None = None):
         self._base = base  # 테스트용: 설정 파일 대신 이 폴더를 쓴다
         self._window = None  # _로 시작해야 pywebview가 JS로 노출하지 않음
+        self._pending = []  # 실행 인자·두 번째 실행에서 넘어온 파일 경로 (JS가 take_files로 가져감)
+        self._lock = threading.Lock()
 
     def _dir(self) -> Path:
         d = self._base
@@ -40,7 +62,7 @@ class Api:
             try:
                 d = Path(json.loads(SETTINGS.read_text(encoding="utf-8"))["data_dir"])
             except (OSError, ValueError, KeyError, TypeError):
-                d = APP_DIR / "PSA_Data"
+                d = default_data_dir()
         (d / "originals").mkdir(parents=True, exist_ok=True)
         (d / "projects").mkdir(exist_ok=True)
         return d
@@ -56,6 +78,21 @@ class Api:
     # ---------- 정보 ----------
     def info(self):
         return {"data_dir": str(self._dir())}
+
+    # ---------- 시작할 때 연 파일 ----------
+    def _add_paths(self, paths) -> None:
+        with self._lock:
+            self._pending += [str(p) for p in paths]
+
+    def take_files(self):
+        """쌓인 .ngb·.mea 경로를 [{name, b64}]로 넘기고 비운다."""
+        with self._lock:
+            paths, self._pending = self._pending, []
+        out = []
+        for p in map(Path, paths):
+            if p.suffix.lower() in OPENABLE and p.is_file():
+                out.append({"name": p.name, "b64": base64.b64encode(p.read_bytes()).decode("ascii")})
+        return out
 
     # ---------- 원본 ----------
     def save_original(self, name: str, b64: str) -> str:
@@ -114,7 +151,7 @@ class Api:
 
     # ---------- 내보내기·폴더 ----------
     def save_text(self, name: str, text: str):
-        p = self._dialog("SAVE", directory=str(Path.home() / "Documents"), save_filename=name,
+        p = self._dialog("SAVE", directory=str(docs_dir()), save_filename=name,
                          file_types=("CSV (*.csv)",))
         if not p:
             return None
@@ -125,13 +162,16 @@ class Api:
         os.startfile(self._dir())  # Windows 전용
 
     def change_dir(self):
-        """저장 위치를 바꾼다. 옛 폴더의 내용은 새 폴더로 복사한다(옛 폴더는 그대로 둔다)."""
+        """저장 위치를 바꾼다. 옛 폴더의 내용은 새 폴더로 복사한다(옛 폴더는 그대로 둔다).
+        고른 곳(또는 그 안의 PSA_Data)에 이미 데이터 목록이 있으면 복사하지 않고 그 데이터를 그대로 쓴다."""
         p = self._dialog("FOLDER", directory=str(self._dir()))
         if not p:
             return None
-        old, new = self._dir(), p / "PSA_Data"
+        old = self._dir()
+        new = p if p.name == "PSA_Data" or (p / "library.json").exists() else p / "PSA_Data"
         if new.resolve() != old.resolve():
-            shutil.copytree(old, new, dirs_exist_ok=True)
+            if not (new / "library.json").exists():  # 기존 목록을 덮어쓰지 않기
+                shutil.copytree(old, new, dirs_exist_ok=True)
             SETTINGS.write_text(json.dumps({"data_dir": str(new)}, ensure_ascii=False), encoding="utf-8")
         return str(new)
 
@@ -163,4 +203,9 @@ if __name__ == "__main__":  # 자체 점검: python storage.py
         except KeyError:
             pass
         assert api.delete_originals([sha]) == 1 and api.read_original(sha) is None
+        (Path(t) / "x.mea").write_bytes(b"m"); (Path(t) / "y.txt").write_bytes(b"t")
+        api._add_paths([Path(t) / "x.mea", Path(t) / "y.txt", Path(t) / "none.ngb"])
+        got = api.take_files()
+        assert [g["name"] for g in got] == ["x.mea"] and base64.b64decode(got[0]["b64"]) == b"m"
+        assert api.take_files() == []  # 한 번 가져가면 비워짐
     print("ok")

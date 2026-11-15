@@ -10,10 +10,13 @@
 
 ## 내려받기
 
-[최신 릴리스](https://github.com/Dubitnarae/PSA_Viewer/releases/latest)에서 `PSA_Viewer.exe`를 받아 실행합니다.
+[최신 릴리스](https://github.com/Dubitnarae/PSA_Viewer/releases/latest)에서 `PSA_Viewer_Setup.exe`를 받아 설치합니다.
 
-- 설치가 필요 없고, 인터넷 없이 동작합니다.
-- 시작할 때 새 버전이 있으면 알려 주고, 동의하면 SHA256을 확인한 뒤 스스로 교체합니다.
+- 관리자 권한 없이 사용자 폴더에 설치되고, 시작 메뉴·바탕 화면에 바로 가기가 생깁니다. 인터넷 없이 동작합니다.
+- `.ngb` 파일을 두 번 누르면 바로 열립니다. `.mea`는 다른 장비도 쓰는 확장자라 오른쪽 클릭 → "연결 프로그램"에 들어갑니다.
+- 시작할 때 새 버전이 있으면 알려 주고, 동의하면 SHA256을 확인한 뒤 조용히 설치하고 다시 엽니다.
+- 처음 실행할 때 Windows가 "PC 보호" 경고를 띄우면 "추가 정보" → "실행"을 누르세요(코드 서명 인증서가 없어서 뜨는 경고).
+- v0.7.0 이하(exe 한 파일)를 쓰던 PC는 자동 업데이트를 받으면 설치 화면이 뜨고, 예전 폴더의 `PSA_Data`가 문서 폴더로 복사됩니다.
 
 ## 기능
 
@@ -33,20 +36,21 @@
 
 ## 저장 데이터
 
-저장한 데이터는 exe와 같은 폴더의 `PSA_Data` 폴더에 쌓이며, 업데이트해도 그대로 남습니다.
-저장 위치는 프로그램 안에서 바꿀 수 있습니다. exe를 옮길 때는 `PSA_Data` 폴더도 함께 옮기세요.
+저장한 데이터는 `문서\PSA_Data` 폴더에 쌓이며, 업데이트하거나 프로그램을 지워도 그대로 남습니다.
+저장 위치는 프로그램 안에서 바꿀 수 있습니다(이미 데이터가 있는 폴더를 고르면 그 데이터를 그대로 씁니다).
 
 ## 직접 빌드
 
-Python과 `pywebview`, `pyinstaller`가 필요합니다.
+Python과 `pywebview`, `pyinstaller`, [Inno Setup 6](https://jrsoftware.org/isinfo.php)이 필요합니다.
 
 ```powershell
 pip install pywebview pyinstaller
 python app.py     # 빌드 없이 바로 실행
-.\build.ps1       # dist\PSA_Viewer.exe 생성
+.\build.ps1       # dist\PSA_Viewer\(프로그램 폴더)와 dist\PSA_Viewer_Setup.exe(설치 프로그램) 생성
+.\publish.ps1     # 확인한 설치 프로그램을 GitHub 릴리스로 게시 (다시 빌드하지 않음)
 ```
 
-점검: `node test_mix.js`, `node test_mea.js`, `python storage.py`
+점검: `node test_mix.js`, `node test_mea.js`, `python storage.py`, `python updater.py`
 
 버전은 `version.py` 한 곳에서만 고칩니다.
 
