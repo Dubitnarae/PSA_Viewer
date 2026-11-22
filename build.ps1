@@ -4,10 +4,10 @@ $ErrorActionPreference = "Stop"
 python sync_version.py
 if ($LASTEXITCODE) { throw "sync_version 실패" }
 pyinstaller --noconfirm --onedir --windowed --name PSA_Viewer --icon icon.ico `
-  --add-data "index.html;." --add-data "cfb.min.js;." --add-data "version.js;." app.py
+  --add-data "index.html;." --add-data "cfb.min.js;." --add-data "version.js;." --add-data "fonts;fonts" app.py
 if ($LASTEXITCODE) { throw "pyinstaller 실패" }
 # 빌드 결과가 원본과 같은지 대조 (이 PC에서 빌드 파일이 깨진 적이 있음)
-foreach ($f in "index.html", "cfb.min.js", "version.js") {
+foreach ($f in "index.html", "cfb.min.js", "version.js", "fonts\PretendardVariable.woff2") {
   if ((Get-FileHash $f).Hash -ne (Get-FileHash "dist\PSA_Viewer\_internal\$f").Hash) { throw "빌드 결과의 $f 가 원본과 다릅니다" }
 }
 $ver = (python -c "import version; print(version.__version__)").Trim()

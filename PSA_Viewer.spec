@@ -5,7 +5,7 @@ a = Analysis(
     ['app.py'],
     pathex=[],
     binaries=[],
-    datas=[('index.html', '.'), ('cfb.min.js', '.'), ('version.js', '.')],
+    datas=[('index.html', '.'), ('cfb.min.js', '.'), ('version.js', '.'), ('fonts', 'fonts')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
