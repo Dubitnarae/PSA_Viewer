@@ -20,3 +20,4 @@ $nf = New-TemporaryFile; [IO.File]::WriteAllText($nf, $notes)  # BOM 없이
 git tag -f "v$ver"; git push -f origin "v$ver"
 gh release create "v$ver" dist\PSA_Viewer_Setup.exe dist\PSA_Viewer_Setup.exe.sha256 dist\PSA_Viewer.exe dist\PSA_Viewer.exe.sha256 --title "PSA 입도 뷰어 v$ver" --notes-file $nf
 Remove-Item $nf
+& "$PSScriptRoot\verify_release.ps1" -Repo Dubitnarae/PSA_Viewer -Tag "v$ver" -Files dist\PSA_Viewer_Setup.exe, dist\PSA_Viewer_Setup.exe.sha256, dist\PSA_Viewer.exe, dist\PSA_Viewer.exe.sha256
